@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        color: var(--figma-color-text);
+        background: var(--figma-color-bg);
+        font-family: Inter, Arial, sans-serif;
+        font-size: 12px;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        gap: 14px;
+        padding: 14px;
+      }
+
+      h1 {
+        font-size: 15px;
+        margin: 0;
+      }
+
+      h2 {
+        font-size: 13px;
+        margin: 0;
+      }
+
+      p {
+        color: var(--figma-color-text-secondary);
+        line-height: 1.4;
+        margin: 0;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      input[type="number"] {
+        background: var(--figma-color-bg);
+        border: 1px solid var(--figma-color-border);
+        border-radius: 4px;
+        color: var(--figma-color-text);
+        min-height: 30px;
+        padding: 6px 8px;
+        width: 96px;
+      }
+
+      button {
+        background: var(--figma-color-bg-brand);
+        border: 0;
+        border-radius: 6px;
+        color: var(--figma-color-text-onbrand);
+        cursor: pointer;
+        min-height: 34px;
+        padding: 8px 10px;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .top-row {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .icon-button {
+        align-items: center;
+        background: var(--figma-color-bg-secondary);
+        border: 1px solid var(--figma-color-border);
+        color: var(--figma-color-text);
+        display: inline-flex;
+        font-size: 15px;
+        justify-content: center;
+        min-height: 30px;
+        padding: 0;
+        width: 30px;
+      }
+
+      .secondary-button {
+        background: var(--figma-color-bg-secondary);
+        border: 1px solid var(--figma-color-border);
+        color: var(--figma-color-text);
+      }
+
+      .stack {
+        display: grid;
+        gap: 8px;
+      }
+
+      .view[hidden] {
+        display: none;
+      }
+
+      .section-title {
+        color: var(--figma-color-text-secondary);
+        font-weight: 600;
+      }
+
+      .cta-status {
+        color: var(--figma-color-text-secondary);
+        min-height: 16px;
+      }
+
+      .status {
+        color: var(--figma-color-text-secondary);
+        min-height: 18px;
+      }
+
+      .progress-panel {
+        border: 1px solid var(--figma-color-border);
+        border-radius: 8px;
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .progress-panel[hidden] {
+        display: none;
+      }
+
+      .progress-header,
+      .progress-meta {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+      }
+
+      .progress-title {
+        color: var(--figma-color-text);
+        font-weight: 600;
+      }
+
+      .progress-percent,
+      .progress-estimate,
+      .progress-detail {
+        color: var(--figma-color-text-secondary);
+      }
+
+      .progress-track {
+        background: var(--figma-color-bg-secondary);
+        border-radius: 999px;
+        height: 8px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        background: var(--figma-color-bg-brand);
+        height: 100%;
+        transition: width 0.25s ease;
+        width: 0%;
+      }
+
+      .warning-list {
+        color: var(--figma-color-text-secondary);
+        display: grid;
+        gap: 4px;
+        line-height: 1.35;
+        max-height: 120px;
+        overflow: auto;
+      }
+
+      .warning-list:empty {
+        display: none;
+      }
+
+      .price-sync-panel {
+        border: 1px solid var(--figma-color-border);
+        border-radius: 8px;
+        display: grid;
+        gap: 6px;
+        padding: 8px 10px;
+      }
+
+      .price-sync-panel[hidden] {
+        display: none;
+      }
+
+      .price-sync-title {
+        color: var(--figma-color-text);
+        font-weight: 600;
+      }
+
+      .price-sync-summary,
+      .price-sync-items {
+        color: var(--figma-color-text-secondary);
+        line-height: 1.35;
+      }
+
+      .price-sync-items {
+        display: grid;
+        gap: 3px;
+        max-height: 130px;
+        overflow: auto;
+      }
+
+      .language-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .port-row {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+      }
+
+      .apply-options {
+        display: grid;
+        gap: 8px;
+      }
+
+      label {
+        align-items: center;
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      input[type="checkbox"] {
+        min-height: auto;
+        width: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top-row">
+        <h1>EU Layout Translator</h1>
+        <button class="icon-button" id="settingsButton" title="Settings" type="button" aria-label="Settings">&#9881;</button>
+      </div>
+      <section class="stack view" id="translateView">
+        <div class="apply-options">
+          <label><input checked id="translateToNewFrame" type="checkbox" /> Translate to a new frame</label>
+        </div>
+        <div class="stack">
+          <div class="section-title" id="languageTitle">Choose language(s) to translate</div>
+          <div class="language-row" aria-label="Target languages">
+            <label><input checked type="checkbox" value="DE" class="locale" /> DE</label>
+            <label><input checked type="checkbox" value="FR" class="locale" /> FR</label>
+            <label><input checked type="checkbox" value="IT" class="locale" /> IT</label>
+            <label><input checked type="checkbox" value="ES" class="locale" /> ES</label>
+          </div>
+        </div>
+        <button id="generateApply">Translate Selected Frame</button>
+        <button class="secondary-button" id="syncProductPriceButton" type="button">Synchronize product price with price book</button>
+        <div class="cta-status" id="ctaStatus"></div>
+      </section>
+      <section class="progress-panel" id="progressPanel" hidden>
+        <div class="progress-header">
+          <span class="progress-title" id="progressTitle">Preparing translation</span>
+          <span class="progress-percent" id="progressPercent">0%</span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-meta">
+          <span class="progress-estimate" id="progressEstimate">Estimating time...</span>
+        </div>
+        <div class="progress-detail" id="progressDetail"></div>
+      </section>
+      <section class="price-sync-panel" id="priceSyncPanel" hidden>
+        <div class="price-sync-title">Price synchronization</div>
+        <div class="price-sync-summary" id="priceSyncSummary"></div>
+        <div class="price-sync-items" id="priceSyncItems"></div>
+      </section>
+      <section class="stack view" id="settingsView" hidden>
+        <div class="stack">
+          <h2>Local Web App Port</h2>
+          <p>Set the localhost port used by the Figma plugin to reach the EU Translator web app. Use the port shown by your running dev server.</p>
+        </div>
+        <div class="port-row">
+          <label for="serverPort">Port</label>
+          <input id="serverPort" inputmode="numeric" min="1" max="65535" step="1" type="number" value="3000" />
+        </div>
+        <button class="secondary-button" id="backButton" type="button">Back</button>
+      </section>
+      <div class="status" id="status"></div>
+      <div class="warning-list" id="warningList"></div>
+    </main>
+
+      <script>
+      let isProcessing = false;
+      const translateView = document.getElementById("translateView");
+      const settingsView = document.getElementById("settingsView");
+      const settingsButton = document.getElementById("settingsButton");
+      const backButton = document.getElementById("backButton");
+      const generateApply = document.getElementById("generateApply");
+      const syncProductPriceButton = document.getElementById("syncProductPriceButton");
+      const translateToNewFrame = document.getElementById("translateToNewFrame");
+      const languageTitle = document.getElementById("languageTitle");
+      const serverPort = document.getElementById("serverPort");
+      const ctaStatus = document.getElementById("ctaStatus");
+      const status = document.getElementById("status");
+      const warningList = document.getElementById("warningList");
+      const progressPanel = document.getElementById("progressPanel");
+      const progressTitle = document.getElementById("progressTitle");
+      const progressPercent = document.getElementById("progressPercent");
+      const progressFill = document.getElementById("progressFill");
+      const progressEstimate = document.getElementById("progressEstimate");
+      const progressDetail = document.getElementById("progressDetail");
+      const priceSyncPanel = document.getElementById("priceSyncPanel");
+      const priceSyncSummary = document.getElementById("priceSyncSummary");
+      const priceSyncItems = document.getElementById("priceSyncItems");
+      let savePortTimer = null;
+      let progressStartedAt = 0;
+      let latestProgressPercent = 0;
+      let latestEstimatedSeconds = 0;
+      let progressTimer = null;
+
+      function setProcessing(processing) {
+        isProcessing = processing;
+        generateApply.disabled = processing;
+        syncProductPriceButton.disabled = processing;
+        ctaStatus.textContent = processing ? "Processing..." : "";
+        if (!processing) window.clearInterval(progressTimer);
+      }
+
+      function resetProgress() {
+        progressStartedAt = Date.now();
+        latestProgressPercent = 0;
+        latestEstimatedSeconds = 0;
+        progressPanel.hidden = false;
+        updateProgress({ message: "Preparing translation", percent: 0 });
+        window.clearInterval(progressTimer);
+        progressTimer = window.setInterval(updateRuntimeEstimate, 1000);
+      }
+
+      function hideProgress() {
+        window.clearInterval(progressTimer);
+        progressPanel.hidden = true;
+      }
+
+      function updateProgress(message) {
+        const percent = Math.max(0, Math.min(100, Number(message.percent || 0)));
+        latestProgressPercent = Math.max(latestProgressPercent, percent);
+        latestEstimatedSeconds = Number(message.estimatedSeconds || latestEstimatedSeconds || 0);
+        progressTitle.textContent = message.message || "Processing translation";
+        progressPercent.textContent = `${latestProgressPercent}%`;
+        progressFill.style.width = `${latestProgressPercent}%`;
+        progressDetail.textContent = message.detail || "";
+        updateRuntimeEstimate();
+      }
+
+      function updateRuntimeEstimate() {
+        if (!progressStartedAt || progressPanel.hidden) return;
+        const elapsedSeconds = Math.max(0, Math.round((Date.now() - progressStartedAt) / 1000));
+        let remainingSeconds = 0;
+        if (latestProgressPercent > 3) {
+          remainingSeconds = Math.max(0, Math.round((elapsedSeconds * (100 - latestProgressPercent)) / latestProgressPercent));
+        } else if (latestEstimatedSeconds) {
+          remainingSeconds = Math.max(0, latestEstimatedSeconds - elapsedSeconds);
+        }
+        const totalEstimate = latestEstimatedSeconds || elapsedSeconds + remainingSeconds;
+        if (!totalEstimate) {
+          progressEstimate.textContent = `Elapsed ${formatDuration(elapsedSeconds)} · estimating runtime...`;
+          return;
+        }
+        progressEstimate.textContent = `Elapsed ${formatDuration(elapsedSeconds)} · est. total ${formatDuration(totalEstimate)} · about ${formatDuration(remainingSeconds)} remaining`;
+      }
+
+      function finishProgress() {
+        latestProgressPercent = 100;
+        progressPercent.textContent = "100%";
+        progressFill.style.width = "100%";
+        progressEstimate.textContent = `Completed in ${formatDuration(Math.max(0, Math.round((Date.now() - progressStartedAt) / 1000)))}`;
+        window.clearInterval(progressTimer);
+      }
+
+      function formatDuration(seconds) {
+        const safeSeconds = Math.max(0, Math.round(seconds));
+        if (safeSeconds < 60) return `${safeSeconds}s`;
+        const minutes = Math.floor(safeSeconds / 60);
+        const remainder = safeSeconds % 60;
+        return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+      }
+
+      function showSettings(show) {
+        settingsView.hidden = !show;
+        translateView.hidden = show;
+        settingsButton.textContent = show ? "x" : "\u2699";
+        settingsButton.setAttribute("aria-label", show ? "Close settings" : "Settings");
+        settingsButton.setAttribute("title", show ? "Close settings" : "Settings");
+      }
+
+      function selectedLocales() {
+        return [...document.querySelectorAll(".locale")]
+          .filter((input) => input.checked)
+          .map((input) => input.value);
+      }
+
+      function localeInputs() {
+        return [...document.querySelectorAll(".locale")];
+      }
+
+      function enforceSingleLocaleSelection(preferredInput) {
+        const locales = localeInputs();
+        const selected = locales.filter((input) => input.checked);
+        const keep = preferredInput && preferredInput.checked
+          ? preferredInput
+          : selected[0] || locales[0];
+        for (const input of locales) {
+          input.checked = input === keep;
+        }
+      }
+
+      function syncTranslationModeUi(preferredInput) {
+        const translateToClone = translateToNewFrame.checked;
+        languageTitle.textContent = translateToClone ? "Choose language(s) to translate" : "Choose one language to translate";
+        if (!translateToClone) enforceSingleLocaleSelection(preferredInput);
+      }
+
+      function readPortInput() {
+        const port = Number(serverPort.value);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          return null;
+        }
+        return port;
+      }
+
+      function savePort() {
+        const port = readPortInput();
+        if (!port) return;
+        parent.postMessage({
+          pluginMessage: {
+            type: "save-web-app-port",
+            port
+          }
+        }, "*");
+      }
+
+      function schedulePortSave() {
+        window.clearTimeout(savePortTimer);
+        savePortTimer = window.setTimeout(savePort, 250);
+      }
+
+      function showWarnings(warnings) {
+        warningList.innerHTML = "";
+        for (const warning of warnings.slice(0, 12)) {
+          const item = document.createElement("div");
+          item.textContent = warning;
+          warningList.appendChild(item);
+        }
+        if (warnings.length > 12) {
+          const item = document.createElement("div");
+          item.textContent = `+ ${warnings.length - 12} more warnings`;
+          warningList.appendChild(item);
+        }
+      }
+
+      function showPriceSyncResult(result) {
+        if (!result) {
+          priceSyncPanel.hidden = true;
+          priceSyncSummary.textContent = "";
+          priceSyncItems.innerHTML = "";
+          return;
+        }
+        priceSyncPanel.hidden = false;
+        const summary = result.summary || {};
+        const matched = Number(summary.matched || 0);
+        const overwritten = Number(summary.overwritten || 0);
+        const reviewed = Number(summary.review || 0);
+        priceSyncSummary.textContent = `${matched} matched · ${overwritten} overwritten · ${reviewed} needs review`;
+        priceSyncItems.innerHTML = "";
+        const items = Array.isArray(result.items) ? result.items : [];
+        for (const text of items.slice(0, 20)) {
+          const row = document.createElement("div");
+          row.textContent = text;
+          priceSyncItems.appendChild(row);
+        }
+        if (items.length > 20) {
+          const row = document.createElement("div");
+          row.textContent = `+ ${items.length - 20} more`;
+          priceSyncItems.appendChild(row);
+        }
+      }
+
+      settingsButton.onclick = () => showSettings(settingsView.hidden);
+      backButton.onclick = () => showSettings(false);
+      serverPort.addEventListener("change", savePort);
+      serverPort.addEventListener("input", schedulePortSave);
+      translateToNewFrame.addEventListener("change", () => syncTranslationModeUi());
+      for (const localeInput of localeInputs()) {
+        localeInput.addEventListener("change", () => {
+          if (!translateToNewFrame.checked) syncTranslationModeUi(localeInput);
+        });
+      }
+      syncTranslationModeUi();
+
+      generateApply.onclick = () => {
+        if (isProcessing) return;
+        const targetLocales = selectedLocales();
+        const port = readPortInput();
+        if (!port) {
+          status.textContent = "Enter a valid localhost port.";
+          return;
+        }
+        if (targetLocales.length === 0) {
+          status.textContent = "Select at least one language.";
+          return;
+        }
+        status.textContent = "Reading selected frame";
+        showWarnings([]);
+        showPriceSyncResult(null);
+        resetProgress();
+        setProcessing(true);
+        parent.postMessage({
+          pluginMessage: {
+            type: "generate-apply-selection",
+            port,
+            targetLocales,
+            translateToNewFrame: translateToNewFrame.checked
+          }
+        }, "*");
+      };
+
+      syncProductPriceButton.onclick = () => {
+        if (isProcessing) return;
+        const port = readPortInput();
+        if (!port) {
+          status.textContent = "Enter a valid localhost port.";
+          return;
+        }
+        status.textContent = "Reading selected frame";
+        showWarnings([]);
+        showPriceSyncResult(null);
+        resetProgress();
+        setProcessing(true);
+        parent.postMessage({
+          pluginMessage: {
+            type: "sync-product-prices",
+            port
+          }
+        }, "*");
+      };
+
+      window.onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (!message) return;
+        if (message.type === "web-app-port-loaded") {
+          serverPort.value = String(message.port);
+        }
+        if (message.type === "web-app-port-saved") {
+          serverPort.value = String(message.port);
+        }
+        if (message.type === "job-applied") {
+          setProcessing(false);
+          finishProgress();
+          status.textContent = message.result.createdFrames.length > 0
+            ? `Created: ${message.result.createdFrames.join(", ")}`
+            : "Updated current frame";
+          showWarnings(message.result.warnings || []);
+        }
+        if (message.type === "status") {
+          status.textContent = message.message;
+        }
+        if (message.type === "price-check-result") {
+          showPriceSyncResult(message.result);
+        }
+        if (message.type === "price-sync-applied") {
+          setProcessing(false);
+          finishProgress();
+          status.textContent = `Synchronized ${Number(message.overwritten || 0)} price field(s).`;
+          showWarnings(message.warnings || []);
+        }
+        if (message.type === "progress") {
+          status.textContent = message.message;
+          updateProgress(message);
+        }
+        if (message.type === "error") {
+          setProcessing(false);
+          hideProgress();
+          status.textContent = message.message;
+        }
+      };
+    </script>
+  </body>
+</html>

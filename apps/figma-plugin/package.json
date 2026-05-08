@@ -1,0 +1,18 @@
+{
+  "name": "apps-figma-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --target=es2018 --format=iife --outfile=dist/main.js && cp src/ui.html dist/ui.html && node -e \"const fs=require('fs');const m=JSON.parse(fs.readFileSync('manifest.json','utf8'));m.main='main.js';m.ui='ui.html';fs.writeFileSync('dist/manifest.json',JSON.stringify(m,null,2));\"",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@eu-translation/shared": "file:../../packages/shared"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.108.0",
+    "esbuild": "^0.25.3"
+  }
+}

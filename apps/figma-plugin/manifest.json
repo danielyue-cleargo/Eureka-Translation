@@ -1,0 +1,25 @@
+{
+  "name": "EU Layout Translator",
+  "id": "eu-layout-translator",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma", "dev"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "devAllowedDomains": [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://localhost:3004",
+      "http://localhost:3005",
+      "http://localhost:3006",
+      "http://localhost:3007",
+      "http://localhost:3008",
+      "http://localhost:3009",
+      "http://localhost:3010"
+    ],
+    "reasoning": "The plugin connects to the translation web app API to fetch or generate approved translation jobs."
+  }
+}
