@@ -1,4 +1,4 @@
-import type { Locale, Product, Term, TermEvidence } from "@eu-translation/shared";
+import type { Campaign, CampaignProductPrice, Locale, Product, Term, TermEvidence } from "@eu-translation/shared";
 import { libraryFolders, locales, termTypes } from "@eu-translation/shared";
 import { createHash } from "node:crypto";
 import { getSupabaseSettings } from "./settings";
@@ -80,6 +80,28 @@ type CloudProductRow = {
   rrp: number | string;
   discounted_price: number | string;
   price_difference?: number | string | null;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  synced_at?: string | null;
+  version?: number | string | null;
+};
+
+type CloudCampaignRow = {
+  id: string;
+  project_id: string;
+  name: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  synced_at?: string | null;
+  version?: number | string | null;
+};
+
+type CloudCampaignProductPriceRow = {
+  id: string;
+  project_id: string;
+  campaign_id: string;
+  product_id: string;
+  discounted_price: number | string;
   updated_at?: string | null;
   deleted_at?: string | null;
   synced_at?: string | null;
@@ -249,6 +271,7 @@ export async function syncProducts(
 
     const saved = store.replaceProducts(projectId, [...plan.nextProducts.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
     store.replaceProductSyncState(projectId, plan.nextSyncState);
+    await syncCampaignPriceBooks(projectId, config);
 
     const syncedAt = new Date().toISOString();
     lastStatus = { configured: true, connected: true, enabled: true, lastSyncedAt: syncedAt };
@@ -270,6 +293,90 @@ export async function syncProducts(
     };
     return { ...lastStatus, products: localProducts };
   }
+}
+
+export async function syncCampaignPriceBooks(
+  projectId = DEFAULT_PROJECT_ID,
+  config = getSupabaseConfig()
+): Promise<{ campaigns: Campaign[]; prices: CampaignProductPrice[] }> {
+  const localCampaigns = store.listCampaigns(projectId);
+  const localPrices = store.listCampaignProductPrices(projectId);
+  if (!config.enabled || !config.configured) return { campaigns: localCampaigns, prices: localPrices };
+
+  await upsertProject(config, projectId);
+  const [cloudCampaignRows, cloudPriceRows] = await Promise.all([
+    fetchCloudCampaigns(config, projectId),
+    fetchCloudCampaignProductPrices(config, projectId)
+  ]);
+  const mergedCampaigns = mergeCampaigns(localCampaigns, cloudCampaignRows);
+  const mergedPrices = mergeCampaignProductPrices(localPrices, cloudPriceRows);
+
+  const cloudCampaignIds = new Set(cloudCampaignRows.map((row) => row.id));
+  const cloudPriceIds = new Set(cloudPriceRows.map((row) => row.id));
+  for (const campaign of mergedCampaigns) {
+    const row = campaignToCloudRow(campaign);
+    if (cloudCampaignIds.has(campaign.id)) {
+      await supabaseRequest(config, `campaigns?id=eq.${encodeURIComponent(campaign.id)}`, {
+        body: JSON.stringify(row),
+        headers: { Prefer: "return=minimal" },
+        method: "PATCH"
+      });
+    } else {
+      await supabaseRequest(config, "campaigns", {
+        body: JSON.stringify([row]),
+        headers: { Prefer: "return=minimal" },
+        method: "POST"
+      });
+    }
+  }
+  for (const price of mergedPrices) {
+    const row = campaignProductPriceToCloudRow(price);
+    if (cloudPriceIds.has(price.id)) {
+      await supabaseRequest(config, `campaign_product_prices?id=eq.${encodeURIComponent(price.id)}`, {
+        body: JSON.stringify(row),
+        headers: { Prefer: "return=minimal" },
+        method: "PATCH"
+      });
+    } else {
+      await supabaseRequest(config, "campaign_product_prices", {
+        body: JSON.stringify([row]),
+        headers: { Prefer: "return=minimal" },
+        method: "POST"
+      });
+    }
+  }
+
+  return {
+    campaigns: store.replaceCampaigns(projectId, mergedCampaigns),
+    prices: store.replaceCampaignProductPrices(projectId, mergedPrices)
+  };
+}
+
+export async function deleteCampaignPriceBookFromCloud(projectId: string, campaignId: string): Promise<void> {
+  const config = getSupabaseConfig();
+  if (!config.enabled || !config.configured) return;
+  const deletedAt = new Date().toISOString();
+  await supabaseRequest(config, `campaign_product_prices?project_id=eq.${encodeURIComponent(projectId)}&campaign_id=eq.${encodeURIComponent(campaignId)}`, {
+    body: JSON.stringify({ deleted_at: deletedAt, synced_at: deletedAt, updated_at: deletedAt }),
+    headers: { Prefer: "return=minimal" },
+    method: "PATCH"
+  });
+  await supabaseRequest(config, `campaigns?project_id=eq.${encodeURIComponent(projectId)}&id=eq.${encodeURIComponent(campaignId)}`, {
+    body: JSON.stringify({ deleted_at: deletedAt, synced_at: deletedAt, updated_at: deletedAt }),
+    headers: { Prefer: "return=minimal" },
+    method: "PATCH"
+  });
+}
+
+export async function deleteCampaignProductPriceFromCloud(projectId: string, campaignId: string, productId: string): Promise<void> {
+  const config = getSupabaseConfig();
+  if (!config.enabled || !config.configured) return;
+  const deletedAt = new Date().toISOString();
+  await supabaseRequest(config, `campaign_product_prices?project_id=eq.${encodeURIComponent(projectId)}&campaign_id=eq.${encodeURIComponent(campaignId)}&product_id=eq.${encodeURIComponent(productId)}`, {
+    body: JSON.stringify({ deleted_at: deletedAt, synced_at: deletedAt, updated_at: deletedAt }),
+    headers: { Prefer: "return=minimal" },
+    method: "PATCH"
+  });
 }
 
 export function mergeLocalAndCloudTerms(localTerms: Term[], cloudRows: CloudTermRow[]): Term[] {
@@ -631,6 +738,20 @@ async function fetchCloudProducts(config: ReturnType<typeof getSupabaseConfig>, 
   );
 }
 
+async function fetchCloudCampaigns(config: ReturnType<typeof getSupabaseConfig>, projectId: string): Promise<CloudCampaignRow[]> {
+  return supabaseRequest<CloudCampaignRow[]>(
+    config,
+    `campaigns?project_id=eq.${encodeURIComponent(projectId)}&select=*`
+  );
+}
+
+async function fetchCloudCampaignProductPrices(config: ReturnType<typeof getSupabaseConfig>, projectId: string): Promise<CloudCampaignProductPriceRow[]> {
+  return supabaseRequest<CloudCampaignProductPriceRow[]>(
+    config,
+    `campaign_product_prices?project_id=eq.${encodeURIComponent(projectId)}&select=*`
+  );
+}
+
 async function pushTermChange(config: ReturnType<typeof getSupabaseConfig>, term: Term, expectedVersion: number, overwrite: boolean): Promise<CloudTermRow> {
   const nextVersion = Math.max(1, expectedVersion + 1);
   const row = termToCloudRow(term, null, expectedVersion > 0 ? nextVersion : 1);
@@ -803,6 +924,79 @@ function cloudRowToProduct(row: CloudProductRow): Product | null {
     priceDifference: Number.isFinite(priceDifference) ? priceDifference : Number((rrp - discountedPrice).toFixed(2)),
     updatedAt: row.updated_at ?? new Date().toISOString()
   });
+}
+
+function campaignToCloudRow(campaign: Campaign): CloudCampaignRow {
+  return {
+    id: campaign.id,
+    project_id: campaign.projectId,
+    name: campaign.name,
+    updated_at: campaign.updatedAt,
+    deleted_at: null,
+    synced_at: new Date().toISOString()
+  };
+}
+
+function cloudRowToCampaign(row: CloudCampaignRow): Campaign | null {
+  if (!row.id || !row.project_id || !row.name || row.deleted_at) return null;
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name.trim().replace(/\s+/g, " "),
+    updatedAt: row.updated_at ?? new Date().toISOString()
+  };
+}
+
+function campaignProductPriceToCloudRow(price: CampaignProductPrice): CloudCampaignProductPriceRow {
+  return {
+    id: price.id,
+    project_id: price.projectId,
+    campaign_id: price.campaignId,
+    product_id: price.productId,
+    discounted_price: price.discountedPrice,
+    updated_at: price.updatedAt,
+    deleted_at: null,
+    synced_at: new Date().toISOString()
+  };
+}
+
+function cloudRowToCampaignProductPrice(row: CloudCampaignProductPriceRow): CampaignProductPrice | null {
+  const discountedPrice = Number(row.discounted_price);
+  if (!row.id || !row.project_id || !row.campaign_id || !row.product_id || row.deleted_at || !Number.isFinite(discountedPrice)) return null;
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    campaignId: row.campaign_id,
+    productId: row.product_id,
+    discountedPrice,
+    updatedAt: row.updated_at ?? new Date().toISOString()
+  };
+}
+
+function mergeCampaigns(localCampaigns: Campaign[], cloudRows: CloudCampaignRow[]): Campaign[] {
+  const byId = new Map(localCampaigns.map((campaign) => [campaign.id, campaign]));
+  for (const row of cloudRows) {
+    const cloudCampaign = cloudRowToCampaign(row);
+    if (!cloudCampaign) continue;
+    const localCampaign = byId.get(cloudCampaign.id);
+    if (!localCampaign || isAfter(cloudCampaign.updatedAt, localCampaign.updatedAt)) {
+      byId.set(cloudCampaign.id, cloudCampaign);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function mergeCampaignProductPrices(localPrices: CampaignProductPrice[], cloudRows: CloudCampaignProductPriceRow[]): CampaignProductPrice[] {
+  const byId = new Map(localPrices.map((price) => [price.id, price]));
+  for (const row of cloudRows) {
+    const cloudPrice = cloudRowToCampaignProductPrice(row);
+    if (!cloudPrice) continue;
+    const localPrice = byId.get(cloudPrice.id);
+    if (!localPrice || isAfter(cloudPrice.updatedAt, localPrice.updatedAt)) {
+      byId.set(cloudPrice.id, cloudPrice);
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 function normalizeProduct(product: Product): Product {

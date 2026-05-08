@@ -1,4 +1,4 @@
-import { locales, type FigmaFrameSnapshot, type FigmaTextNode, type Locale, type Product, type TranslationJob } from "@eu-translation/shared";
+import { locales, type Campaign, type FigmaFrameSnapshot, type FigmaTextNode, type Locale, type Product, type TranslationJob } from "@eu-translation/shared";
 import { buildPriceSyncPlanFromNodes } from "./price-sync";
 
 const DEFAULT_WEB_APP_PORT = 3000;
@@ -19,6 +19,14 @@ figma.ui.onmessage = async (message) => {
       const port = readWebAppPort(message.port);
       await figma.clientStorage.setAsync(WEB_APP_PORT_STORAGE_KEY, port);
       figma.ui.postMessage({ type: "web-app-port-saved", port });
+      return;
+    }
+
+    if (message.type === "load-campaigns") {
+      const port = readWebAppPort(message.port);
+      await figma.clientStorage.setAsync(WEB_APP_PORT_STORAGE_KEY, port);
+      const campaigns = await fetchCampaigns(webAppUrlForPort(port), DEFAULT_PROJECT_ID);
+      figma.ui.postMessage({ type: "campaigns-loaded", campaigns });
       return;
     }
 
@@ -69,7 +77,8 @@ figma.ui.onmessage = async (message) => {
       const port = readWebAppPort(message.port);
       await figma.clientStorage.setAsync(WEB_APP_PORT_STORAGE_KEY, port);
       const webAppUrl = webAppUrlForPort(port);
-      const products = await fetchProducts(webAppUrl, DEFAULT_PROJECT_ID);
+      const campaignId = typeof message.campaignId === "string" ? message.campaignId.trim() : "";
+      const products = await fetchProducts(webAppUrl, DEFAULT_PROJECT_ID, campaignId);
       postProgress({ message: "Matching and preparing overwrite plan", percent: 56, estimatedSeconds });
       const priceSyncPlan = buildPriceSyncPlan(selectedFrameNode, products);
       figma.ui.postMessage({ type: "price-check-result", result: planToUiResult(priceSyncPlan) });
@@ -137,12 +146,27 @@ async function sendSavedWebAppPort(): Promise<void> {
   figma.ui.postMessage({ type: "web-app-port-loaded", port });
 }
 
-async function fetchProducts(webAppUrl: string, projectId: string): Promise<Product[]> {
+async function fetchCampaigns(webAppUrl: string, projectId: string): Promise<Campaign[]> {
   let response: Response;
   try {
-    response = await fetch(`${webAppUrl}/api/products?projectId=${encodeURIComponent(projectId)}`, { method: "GET" });
+    response = await fetch(`${webAppUrl}/api/campaigns?projectId=${encodeURIComponent(projectId)}`, { method: "GET" });
   } catch {
-    throw new Error(`Cannot load products from ${webAppUrl}.`);
+    throw new Error(`Cannot load campaigns from ${webAppUrl}.`);
+  }
+  const data = await readJsonResponse(response, webAppUrl);
+  if (!response.ok) throw new Error(data.error || "Loading campaigns failed");
+  return Array.isArray(data.campaigns) ? (data.campaigns as Campaign[]) : [];
+}
+
+async function fetchProducts(webAppUrl: string, projectId: string, campaignId = ""): Promise<Product[]> {
+  let response: Response;
+  try {
+    const query = campaignId
+      ? `projectId=${encodeURIComponent(projectId)}&campaignId=${encodeURIComponent(campaignId)}`
+      : `projectId=${encodeURIComponent(projectId)}`;
+    response = await fetch(`${webAppUrl}/api/products?${query}`, { method: "GET" });
+  } catch (error) {
+    throw new Error(`Cannot load products from ${webAppUrl}: ${formatPluginError(error)}`);
   }
   const data = await readJsonResponse(response, webAppUrl);
   if (!response.ok) throw new Error(data.error || "Loading products failed");

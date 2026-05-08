@@ -795,12 +795,41 @@ select:focus-visible {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.product-toolbar-row {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+
 .products-table {
-  min-width: 760px;
+  min-width: 860px;
 }
 
 .products-table th:first-child {
-  width: 46%;
+  width: 42%;
+}
+
+.products-table th:nth-child(2),
+.products-table th:nth-child(3),
+.products-table th:nth-child(4) {
+  width: 16%;
+}
+
+.products-table th:last-child {
+  width: 164px;
+}
+
+.products-table .table-actions {
+  flex-wrap: nowrap;
+  min-width: 148px;
+}
+
+.products-table .table-action-button {
+  flex: 0 0 68px;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
 }
 
 .upload-issue-list {
@@ -818,6 +847,17 @@ select:focus-visible {
 
 .upload-issue-list strong {
   color: var(--text);
+}
+
+.campaign-price-changed {
+  color: #c82929;
+  font-weight: 700;
+}
+
+.campaign-create-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .search-mode-select {

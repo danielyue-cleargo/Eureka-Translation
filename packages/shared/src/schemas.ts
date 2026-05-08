@@ -67,6 +67,26 @@ export interface Product {
   discountedPrice: number;
   priceDifference: number;
   updatedAt: string;
+  campaignId?: string;
+  campaignName?: string;
+  defaultDiscountedPrice?: number;
+  hasCampaignPrice?: boolean;
+}
+
+export interface Campaign {
+  id: string;
+  projectId: string;
+  name: string;
+  updatedAt: string;
+}
+
+export interface CampaignProductPrice {
+  id: string;
+  projectId: string;
+  campaignId: string;
+  productId: string;
+  discountedPrice: number;
+  updatedAt: string;
 }
 
 export interface FigmaTextNode {

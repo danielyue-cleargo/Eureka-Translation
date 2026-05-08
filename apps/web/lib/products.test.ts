@@ -64,6 +64,38 @@ test("product workbook skips accessory rows from product duplicate checks", () =
   assert.deepEqual(preview.products.map((product) => product.productName), ["Eureka J15"]);
 });
 
+test("campaign workbook requires products from default price book", () => {
+  const existing = [makeProduct("product_1", "Eureka J15", 1999, 1499)];
+  const preview = parseProductWorkbook(makeWorkbook([
+    ["Eureka J15", "1899", "1399"],
+    ["Eureka J20", "2999", "2499"]
+  ]), existing, { campaignMode: true });
+
+  assert.deepEqual(preview.errors, [
+    {
+      message: "Product must exist in the default price book before adding a campaign price.",
+      rowNumber: 2
+    }
+  ]);
+  assert.deepEqual(preview.products.map((product) => product.productName), ["Eureka J15"]);
+  assert.equal(preview.products[0]?.discountedPrice, 1399);
+});
+
+test("campaign workbook reports duplicate existing campaign overrides", () => {
+  const existing = [makeProduct("product_1", "Eureka J15", 1999, 1499)];
+  const preview = parseProductWorkbook(makeWorkbook([
+    ["Eureka J15", "1899", "1399"],
+    ["Eureka J15", "1899", "1299"]
+  ]), existing, {
+    campaignMode: true,
+    existingCampaignProductNames: ["Eureka J15"]
+  });
+
+  assert.deepEqual(preview.duplicates, ["Eureka J15"]);
+  assert.equal(preview.errors.length, 0);
+  assert.equal(preview.products.length, 2);
+});
+
 test("accessory detection does not classify translated robot vacuum names as accessories", () => {
   assert.equal(isAccessoryProductName("Eureka J12 Ultra Saugroboter"), false);
   assert.equal(isAccessoryProductName("eureka-j12-staubsaugerbeutel-3"), true);

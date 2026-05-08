@@ -68,6 +68,36 @@ alter table products add column if not exists version integer not null default 1
 alter table products add column if not exists deleted_at timestamptz;
 alter table products add column if not exists synced_at timestamptz;
 
+create table if not exists campaigns (
+  id text primary key,
+  project_id text not null references projects(id) on delete cascade,
+  name text not null,
+  version integer not null default 1,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  synced_at timestamptz
+);
+
+alter table campaigns add column if not exists version integer not null default 1;
+alter table campaigns add column if not exists deleted_at timestamptz;
+alter table campaigns add column if not exists synced_at timestamptz;
+
+create table if not exists campaign_product_prices (
+  id text primary key,
+  project_id text not null references projects(id) on delete cascade,
+  campaign_id text not null references campaigns(id) on delete cascade,
+  product_id text not null references products(id) on delete cascade,
+  discounted_price numeric not null,
+  version integer not null default 1,
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  synced_at timestamptz
+);
+
+alter table campaign_product_prices add column if not exists version integer not null default 1;
+alter table campaign_product_prices add column if not exists deleted_at timestamptz;
+alter table campaign_product_prices add column if not exists synced_at timestamptz;
+
 create table if not exists figma_jobs (
   id text primary key,
   project_id text not null references projects(id) on delete cascade,
@@ -118,5 +148,11 @@ create unique index if not exists products_project_id_product_name_key on produc
 create index if not exists products_project_id_updated_at_idx on products(project_id, updated_at);
 create index if not exists products_project_id_deleted_at_idx on products(project_id, deleted_at);
 create index if not exists products_project_id_id_version_idx on products(project_id, id, version);
+create unique index if not exists campaigns_project_id_name_key on campaigns(project_id, lower(trim(name))) where deleted_at is null;
+create unique index if not exists campaign_product_prices_campaign_product_key on campaign_product_prices(campaign_id, product_id) where deleted_at is null;
+create index if not exists campaigns_project_id_updated_at_idx on campaigns(project_id, updated_at);
+create index if not exists campaign_product_prices_project_id_updated_at_idx on campaign_product_prices(project_id, updated_at);
+create index if not exists campaign_product_prices_campaign_id_idx on campaign_product_prices(campaign_id);
+create index if not exists campaign_product_prices_product_id_idx on campaign_product_prices(product_id);
 create index if not exists figma_jobs_project_id_idx on figma_jobs(project_id);
 create index if not exists translations_job_id_idx on translations(job_id);

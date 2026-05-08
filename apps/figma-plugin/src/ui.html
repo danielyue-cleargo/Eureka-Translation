@@ -37,7 +37,8 @@
       }
 
       button,
-      input {
+      input,
+      select {
         font: inherit;
       }
 
@@ -49,6 +50,16 @@
         min-height: 30px;
         padding: 6px 8px;
         width: 96px;
+      }
+
+      select {
+        background: var(--figma-color-bg);
+        border: 1px solid var(--figma-color-border);
+        border-radius: 4px;
+        color: var(--figma-color-text);
+        min-height: 30px;
+        padding: 6px 8px;
+        width: 100%;
       }
 
       button {
@@ -220,6 +231,11 @@
         gap: 8px;
       }
 
+      .price-book-row {
+        display: grid;
+        gap: 6px;
+      }
+
       label {
         align-items: center;
         display: inline-flex;
@@ -252,6 +268,12 @@
           </div>
         </div>
         <button id="generateApply">Translate Selected Frame</button>
+        <label class="price-book-row">
+          <span class="section-title">Price book</span>
+          <select id="priceBookSelect">
+            <option value="">Default Price Book</option>
+          </select>
+        </label>
         <button class="secondary-button" id="syncProductPriceButton" type="button">Synchronize product price with price book</button>
         <div class="cta-status" id="ctaStatus"></div>
       </section>
@@ -296,6 +318,7 @@
       const backButton = document.getElementById("backButton");
       const generateApply = document.getElementById("generateApply");
       const syncProductPriceButton = document.getElementById("syncProductPriceButton");
+      const priceBookSelect = document.getElementById("priceBookSelect");
       const translateToNewFrame = document.getElementById("translateToNewFrame");
       const languageTitle = document.getElementById("languageTitle");
       const serverPort = document.getElementById("serverPort");
@@ -438,6 +461,17 @@
         }, "*");
       }
 
+      function loadCampaigns() {
+        const port = readPortInput();
+        if (!port) return;
+        parent.postMessage({
+          pluginMessage: {
+            type: "load-campaigns",
+            port
+          }
+        }, "*");
+      }
+
       function schedulePortSave() {
         window.clearTimeout(savePortTimer);
         savePortTimer = window.setTimeout(savePort, 250);
@@ -487,6 +521,7 @@
       settingsButton.onclick = () => showSettings(settingsView.hidden);
       backButton.onclick = () => showSettings(false);
       serverPort.addEventListener("change", savePort);
+      serverPort.addEventListener("change", loadCampaigns);
       serverPort.addEventListener("input", schedulePortSave);
       translateToNewFrame.addEventListener("change", () => syncTranslationModeUi());
       for (const localeInput of localeInputs()) {
@@ -538,6 +573,7 @@
         parent.postMessage({
           pluginMessage: {
             type: "sync-product-prices",
+            campaignId: priceBookSelect.value,
             port
           }
         }, "*");
@@ -548,9 +584,26 @@
         if (!message) return;
         if (message.type === "web-app-port-loaded") {
           serverPort.value = String(message.port);
+          loadCampaigns();
         }
         if (message.type === "web-app-port-saved") {
           serverPort.value = String(message.port);
+          loadCampaigns();
+        }
+        if (message.type === "campaigns-loaded") {
+          const selected = priceBookSelect.value;
+          priceBookSelect.innerHTML = "";
+          const defaultOption = document.createElement("option");
+          defaultOption.value = "";
+          defaultOption.textContent = "Default Price Book";
+          priceBookSelect.appendChild(defaultOption);
+          for (const campaign of Array.isArray(message.campaigns) ? message.campaigns : []) {
+            const option = document.createElement("option");
+            option.value = campaign.id;
+            option.textContent = campaign.name;
+            priceBookSelect.appendChild(option);
+          }
+          priceBookSelect.value = [...priceBookSelect.options].some((option) => option.value === selected) ? selected : "";
         }
         if (message.type === "job-applied") {
           setProcessing(false);

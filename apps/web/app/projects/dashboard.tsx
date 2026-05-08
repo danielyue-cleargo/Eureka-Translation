@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Locale, Product, Term } from "@eu-translation/shared";
+import type { Campaign, Locale, Product, Term } from "@eu-translation/shared";
 import { createId, folderForTermType, libraryFolders, locales, termTypes } from "@eu-translation/shared";
 import {
   cloudSyncBadgeLabel,
@@ -58,6 +58,8 @@ export function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [extractedTerms, setExtractedTerms] = useState<Term[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
   const [savedTerms, setSavedTerms] = useState<Term[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [saveTagDialogOpen, setSaveTagDialogOpen] = useState(false);
@@ -84,6 +86,7 @@ export function Dashboard() {
   useEffect(() => {
     void loadLibrary();
     void loadProducts();
+    void loadCampaigns();
     void refreshApiConnections();
     void refreshCloudSync();
     const timer = window.setInterval(() => {
@@ -152,11 +155,18 @@ export function Dashboard() {
     setSavedTerms(data.terms ?? []);
   }
 
-  async function loadProducts() {
-    const response = await fetch("/api/products");
+  async function loadProducts(campaignId = selectedCampaignId) {
+    const query = campaignId ? `?campaignId=${encodeURIComponent(campaignId)}` : "";
+    const response = await fetch(`/api/products${query}`);
     const data = await response.json();
     if (data.sync) setCloudSync(data.sync);
     setProducts(data.products ?? []);
+  }
+
+  async function loadCampaigns() {
+    const response = await fetch("/api/campaigns");
+    const data = await response.json();
+    setCampaigns(data.campaigns ?? []);
   }
 
   async function refreshCloudSync() {
@@ -232,7 +242,7 @@ export function Dashboard() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Product sync failed");
       if (data.sync) setCloudSync(data.sync);
-      setProducts(data.products ?? []);
+      await loadProducts(selectedCampaignId);
       if (Array.isArray(data.conflicts) && data.conflicts.length > 0) {
         setProductSyncConflicts(data.conflicts);
         showNotice(`${data.conflicts.length} Product sync conflict${data.conflicts.length === 1 ? "" : "s"} need review`, "error");
@@ -275,20 +285,20 @@ export function Dashboard() {
     setBusy(null);
   }
 
-  async function uploadProducts(rows: ProductUploadRow[], override = false) {
+  async function uploadProducts(rows: ProductUploadRow[], override = false, campaignId = selectedCampaignId) {
     setBusy("products-upload");
     showNotice("Saving Products...");
     try {
       const response = await fetch("/api/products", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ override, rows })
+        body: JSON.stringify({ campaignId, override, rows })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Product upload failed");
       if (data.sync) setCloudSync(data.sync);
       setProducts(data.products ?? []);
-      showNotice(`Saved ${data.savedCount ?? rows.length} products`, "success");
+      showNotice(`Saved ${data.savedCount ?? rows.length} ${campaignId ? "campaign price" : "product"}${(data.savedCount ?? rows.length) === 1 ? "" : "s"}`, "success");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "Product upload failed", "error");
       throw error;
@@ -297,7 +307,30 @@ export function Dashboard() {
     }
   }
 
-  async function updateProduct(product: Product) {
+  async function addProduct(product: { discountedPrice: number; productName: string; rrp: number }): Promise<boolean> {
+    setBusy("add-product");
+    showNotice("Adding product...");
+    try {
+      const response = await fetch("/api/products", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(product)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Add product failed");
+      if (data.sync) setCloudSync(data.sync);
+      await loadProducts(selectedCampaignId);
+      showNotice("Product added", "success");
+      return true;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Add product failed", "error");
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updateProduct(product: Product, campaignId = selectedCampaignId) {
     setBusy(`product-update-${product.id}`);
     showNotice("Updating Product...");
     try {
@@ -306,6 +339,7 @@ export function Dashboard() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           discountedPrice: product.discountedPrice,
+          campaignId,
           priceDifference: product.rrp - product.discountedPrice,
           productId: product.id,
           productName: product.productName,
@@ -316,29 +350,95 @@ export function Dashboard() {
       if (!response.ok) throw new Error(data.error || "Product update failed");
       if (data.sync) setCloudSync(data.sync);
       setProducts(data.products ?? []);
-      showNotice("Product updated", "success");
+      showNotice(campaignId ? "Campaign price updated" : "Product updated", "success");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "Product update failed", "error");
     }
     setBusy(null);
   }
 
-  async function deleteProduct(productId: string) {
+  async function deleteProduct(productId: string, campaignId = selectedCampaignId) {
     setBusy(`product-delete-${productId}`);
     showNotice("Deleting Product...");
     try {
       const response = await fetch("/api/products", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ productId })
+        body: JSON.stringify({ campaignId, productId })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Product delete failed");
       if (data.sync) setCloudSync(data.sync);
       setProducts(data.products ?? []);
-      showNotice("Product deleted", "success");
+      showNotice(campaignId ? "Campaign price removed" : "Product deleted", "success");
     } catch (error) {
       showNotice(error instanceof Error ? error.message : "Product delete failed", "error");
+    }
+    setBusy(null);
+  }
+
+  async function selectCampaign(campaignId: string) {
+    setSelectedCampaignId(campaignId);
+    await loadProducts(campaignId);
+  }
+
+  async function createCampaign(name: string): Promise<Campaign | null> {
+    setBusy("campaigns");
+    try {
+      const response = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Create campaign failed");
+      setCampaigns(data.campaigns ?? []);
+      const campaign = (data.campaigns ?? []).find((item: Campaign) => item.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase()) ?? null;
+      showNotice("Campaign created", "success");
+      return campaign;
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Create campaign failed", "error");
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function renameCampaign(campaignId: string, name: string) {
+    setBusy("campaigns");
+    try {
+      const response = await fetch("/api/campaigns", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ campaignId, name })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Rename campaign failed");
+      setCampaigns(data.campaigns ?? []);
+      showNotice("Campaign renamed", "success");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Rename campaign failed", "error");
+    }
+    setBusy(null);
+  }
+
+  async function deleteCampaign(campaignId: string) {
+    setBusy("campaigns");
+    try {
+      const response = await fetch("/api/campaigns", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ campaignId })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Delete campaign failed");
+      setCampaigns(data.campaigns ?? []);
+      const nextCampaignId = selectedCampaignId === campaignId ? "" : selectedCampaignId;
+      setSelectedCampaignId(nextCampaignId);
+      await loadProducts(nextCampaignId);
+      showNotice("Campaign deleted", "success");
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Delete campaign failed", "error");
     }
     setBusy(null);
   }
@@ -600,12 +700,19 @@ export function Dashboard() {
         ) : activePage === "products" ? (
           <ProductsPanel
             busy={busy}
+            campaigns={campaigns}
             cloudSync={cloudSync}
+            onAddProduct={addProduct}
+            onCreateCampaign={createCampaign}
             onDeleteProduct={deleteProduct}
+            onDeleteCampaign={deleteCampaign}
+            onRenameCampaign={renameCampaign}
+            onSelectCampaign={selectCampaign}
             onSyncNow={syncProductsNow}
             onUpdateProduct={updateProduct}
             onUploadProducts={uploadProducts}
             products={products}
+            selectedCampaignId={selectedCampaignId}
           />
         ) : (
           <SettingPanel onConnectionsChanged={refreshApiConnections} onNotice={showNotice} />
@@ -2059,26 +2166,44 @@ function CloudSyncBadge({
 
 function ProductsPanel({
   busy,
+  campaigns,
   cloudSync,
+  onAddProduct,
+  onCreateCampaign,
+  onDeleteCampaign,
   onDeleteProduct,
+  onRenameCampaign,
+  onSelectCampaign,
   onSyncNow,
   onUpdateProduct,
   onUploadProducts,
-  products
+  products,
+  selectedCampaignId
 }: {
   busy?: string | null;
+  campaigns: Campaign[];
   cloudSync?: CloudSyncStatus;
-  onDeleteProduct: (productId: string) => void;
+  onAddProduct: (product: { discountedPrice: number; productName: string; rrp: number }) => Promise<boolean>;
+  onCreateCampaign: (name: string) => Promise<Campaign | null>;
+  onDeleteCampaign: (campaignId: string) => void;
+  onDeleteProduct: (productId: string, campaignId?: string) => void;
+  onRenameCampaign: (campaignId: string, name: string) => void;
+  onSelectCampaign: (campaignId: string) => void;
   onSyncNow?: () => void;
-  onUpdateProduct: (product: Product) => void;
-  onUploadProducts: (rows: ProductUploadRow[], override?: boolean) => Promise<void>;
+  onUpdateProduct: (product: Product, campaignId?: string) => void;
+  onUploadProducts: (rows: ProductUploadRow[], override?: boolean, campaignId?: string) => Promise<void>;
   products: Product[];
+  selectedCampaignId: string;
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Product | null>(null);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [campaignManagerOpen, setCampaignManagerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId);
+  const campaignMode = Boolean(selectedCampaignId);
   const filteredProducts = products.filter((product) => matchesProductSearch(product, searchQuery));
   const pageCount = Math.max(1, Math.ceil(filteredProducts.length / LIBRARY_PAGE_SIZE));
   const clampedPage = Math.min(currentPage, pageCount);
@@ -2104,7 +2229,7 @@ function ProductsPanel({
 
   function saveEdit() {
     if (!draft) return;
-    onUpdateProduct(draft);
+    onUpdateProduct(draft, selectedCampaignId);
     cancelEdit();
   }
 
@@ -2114,16 +2239,33 @@ function ProductsPanel({
         <div className="panel-title-row">
           <div>
             <h2>Products</h2>
-            <p>Manage product RRP and discounted prices.</p>
+            <p>{campaignMode ? `Manage discounted price overrides for ${selectedCampaign?.name ?? "selected campaign"}.` : "Manage product RRP and discounted prices."}</p>
           </div>
           <div className="library-header-actions">
             {cloudSync ? <CloudSyncBadge busy={busy === "products-cloud-sync"} onSyncNow={onSyncNow} sync={cloudSync} /> : null}
+            <button className="button secondary" onClick={() => setAddProductOpen(true)} type="button">
+              Add Product
+            </button>
+            <button className="button secondary" onClick={() => setCampaignManagerOpen(true)} type="button">
+              Manage Campaign
+            </button>
             <button className="button" onClick={() => setUploadOpen(true)} type="button">
               Upload Product
             </button>
           </div>
         </div>
-        <div className="product-search-row">
+        <div className="product-toolbar-row">
+          <label className="field">
+            <span>Price book</span>
+            <select className="select" onChange={(event) => onSelectCampaign(event.target.value)} suppressHydrationWarning value={selectedCampaignId}>
+              <option value="">Default Price Book</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             className="input"
             onChange={(event) => setSearchQuery(event.target.value)}
@@ -2155,7 +2297,7 @@ function ProductsPanel({
                     return (
                       <tr key={product.id}>
                         <td>
-                          {isEditing ? (
+                          {isEditing && !campaignMode ? (
                             <input
                               className="table-input"
                               onChange={(event) => setDraft({ ...draft, productName: event.target.value })}
@@ -2167,7 +2309,7 @@ function ProductsPanel({
                           )}
                         </td>
                         <td>
-                          {isEditing ? (
+                          {isEditing && !campaignMode ? (
                             <input
                               className="table-input"
                               inputMode="decimal"
@@ -2191,7 +2333,9 @@ function ProductsPanel({
                               value={draft.discountedPrice}
                             />
                           ) : (
-                            formatPriceNumber(product.discountedPrice)
+                            <span className={campaignMode && product.hasCampaignPrice && product.discountedPrice !== product.defaultDiscountedPrice ? "campaign-price-changed" : ""}>
+                              {formatPriceNumber(product.discountedPrice)}
+                            </span>
                           )}
                         </td>
                         <td>{formatPriceNumber(isEditing ? draft.rrp - draft.discountedPrice : product.priceDifference)}</td>
@@ -2213,10 +2357,10 @@ function ProductsPanel({
                               <button
                                 className="small-button danger table-action-button"
                                 disabled={busy === `product-delete-${product.id}`}
-                                onClick={() => onDeleteProduct(product.id)}
+                                onClick={() => onDeleteProduct(product.id, selectedCampaignId)}
                                 type="button"
                               >
-                                Delete
+                                {campaignMode ? "Remove" : "Delete"}
                               </button>
                             </div>
                           )}
@@ -2246,34 +2390,193 @@ function ProductsPanel({
           </>
         )}
       </div>
+      {addProductOpen ? (
+        <AddProductDialog
+          busy={busy === "add-product"}
+          existingProducts={products}
+          onAdd={async (product) => {
+            const saved = await onAddProduct(product);
+            if (saved) setAddProductOpen(false);
+          }}
+          onClose={() => setAddProductOpen(false)}
+        />
+      ) : null}
       {uploadOpen ? (
         <UploadProductDialog
           busy={busy === "products-upload"}
           onClose={() => setUploadOpen(false)}
+          campaigns={campaigns}
+          onCreateCampaign={onCreateCampaign}
           onUpload={async (rows, override) => {
-            await onUploadProducts(rows, override);
+            await onUploadProducts(rows, override, selectedCampaignId);
             setUploadOpen(false);
           }}
+          onUploadToCampaign={async (rows, override, campaignId) => {
+            await onUploadProducts(rows, override, campaignId);
+            onSelectCampaign(campaignId);
+            setUploadOpen(false);
+          }}
+          selectedCampaignId={selectedCampaignId}
+        />
+      ) : null}
+      {campaignManagerOpen ? (
+        <ManageCampaignDialog
+          busy={busy === "campaigns"}
+          campaigns={campaigns}
+          onClose={() => setCampaignManagerOpen(false)}
+          onCreateCampaign={onCreateCampaign}
+          onDeleteCampaign={onDeleteCampaign}
+          onRenameCampaign={onRenameCampaign}
         />
       ) : null}
     </div>
   );
 }
 
-function UploadProductDialog({
+function AddProductDialog({
   busy,
-  onClose,
-  onUpload
+  existingProducts,
+  onAdd,
+  onClose
 }: {
   busy: boolean;
+  existingProducts: Product[];
+  onAdd: (product: { discountedPrice: number; productName: string; rrp: number }) => void;
   onClose: () => void;
+}) {
+  const [productName, setProductName] = useState("");
+  const [rrp, setRrp] = useState("");
+  const [discountedPrice, setDiscountedPrice] = useState("");
+  const normalizedName = productName.trim().replace(/\s+/g, " ");
+  const duplicateProduct = existingProducts.some((product) => product.productName.trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
+  const rrpValue = Number(rrp);
+  const discountedPriceValue = Number(discountedPrice);
+  const canSave = Boolean(normalizedName && rrp.trim() && discountedPrice.trim()) && Number.isFinite(rrpValue) && Number.isFinite(discountedPriceValue) && !duplicateProduct;
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
+
+  function submit() {
+    if (!canSave) return;
+    onAdd({
+      discountedPrice: discountedPriceValue,
+      productName: normalizedName,
+      rrp: rrpValue
+    });
+  }
+
+  return (
+    <div className="modal-overlay" role="presentation">
+      <section className="modal-dialog stack add-translation-dialog" role="dialog" aria-modal="true" aria-labelledby="add-product-title">
+        <div>
+          <h2 id="add-product-title">Add Product</h2>
+          <p className="modal-copy">Manually add one product to the Default Price Book.</p>
+        </div>
+        <label className="field">
+          <span>Product Name</span>
+          <input
+            autoFocus
+            className="input"
+            onChange={(event) => setProductName(event.target.value)}
+            placeholder="Eureka J15 Pro Ultra"
+            suppressHydrationWarning
+            value={productName}
+          />
+        </label>
+        <div className="translation-field-grid">
+          <label className="field">
+            <span>RRP</span>
+            <input
+              className="input"
+              inputMode="decimal"
+              min="0"
+              onChange={(event) => setRrp(event.target.value)}
+              placeholder="799.99"
+              step="0.01"
+              suppressHydrationWarning
+              type="number"
+              value={rrp}
+            />
+          </label>
+          <label className="field">
+            <span>Discounted Price</span>
+            <input
+              className="input"
+              inputMode="decimal"
+              min="0"
+              onChange={(event) => setDiscountedPrice(event.target.value)}
+              placeholder="499.99"
+              step="0.01"
+              suppressHydrationWarning
+              type="number"
+              value={discountedPrice}
+            />
+          </label>
+        </div>
+        {duplicateProduct ? <p className="error-text">This product already exists in the price book.</p> : null}
+        <div className="modal-actions">
+          <button className="button" disabled={busy || !canSave} onClick={submit} type="button">
+            {busy ? "Adding..." : "Add"}
+          </button>
+          <button className="button secondary" disabled={busy} onClick={onClose} type="button">
+            Cancel
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function UploadProductDialog({
+  busy,
+  campaigns,
+  onClose,
+  onCreateCampaign,
+  onUpload,
+  onUploadToCampaign,
+  selectedCampaignId
+}: {
+  busy: boolean;
+  campaigns: Campaign[];
+  onClose: () => void;
+  onCreateCampaign: (name: string) => Promise<Campaign | null>;
   onUpload: (rows: ProductUploadRow[], override?: boolean) => Promise<void>;
+  onUploadToCampaign: (rows: ProductUploadRow[], override: boolean, campaignId: string) => Promise<void>;
+  selectedCampaignId: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [duplicates, setDuplicates] = useState<string[]>([]);
   const [errors, setErrors] = useState<Array<{ message: string; rowNumber: number }>>([]);
   const [rows, setRows] = useState<ProductUploadRow[]>([]);
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId);
+  const [campaignDraft, setCampaignDraft] = useState(selectedCampaign?.name ?? "");
   const [status, setStatus] = useState("Excel format: Column A Product Name, Column B RRP, Column C Discounted Price.");
+  const campaignMode = Boolean(campaignDraft.trim());
+
+  async function resolveCampaignDraft(): Promise<string> {
+    const name = campaignDraft.trim();
+    if (!name) return "";
+    const existing = campaigns.find((campaign) => campaign.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (existing) return existing.id;
+    const campaign = await onCreateCampaign(name);
+    if (!campaign) throw new Error("Campaign could not be created.");
+    setCampaignDraft(campaign.name);
+    return campaign.id;
+  }
+
+  function updateCampaignDraft(value: string) {
+    setCampaignDraft(value);
+    setDuplicates([]);
+    setErrors([]);
+    setRows([]);
+    setStatus("Excel format: Column A Product Name, Column B RRP, Column C Discounted Price.");
+  }
 
   async function previewUpload() {
     const file = fileInputRef.current?.files?.[0];
@@ -2281,8 +2584,16 @@ function UploadProductDialog({
       setStatus("Choose an .xls or .xlsx file first.");
       return;
     }
+    let campaignId = "";
+    try {
+      campaignId = await resolveCampaignDraft();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Campaign could not be created.");
+      return;
+    }
     const formData = new FormData();
     formData.set("file", file);
+    if (campaignId) formData.set("campaignId", campaignId);
     const response = await fetch("/api/products/upload", { method: "POST", body: formData });
     const data = await response.json();
     if (!response.ok) {
@@ -2304,12 +2615,27 @@ function UploadProductDialog({
       setStatus(`${data.duplicates.length} duplicate product${data.duplicates.length === 1 ? "" : "s"} found.`);
       return;
     }
-    await onUpload(data.products ?? [], false);
+    if (campaignId) {
+      await onUploadToCampaign(data.products ?? [], false, campaignId);
+    } else {
+      await onUpload(data.products ?? [], false);
+    }
   }
 
   async function overrideDuplicates() {
     if (rows.length === 0 || errors.length > 0) return;
-    await onUpload(rows, true);
+    let campaignId = "";
+    try {
+      campaignId = await resolveCampaignDraft();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Campaign could not be created.");
+      return;
+    }
+    if (campaignId) {
+      await onUploadToCampaign(rows, true, campaignId);
+    } else {
+      await onUpload(rows, true);
+    }
   }
 
   return (
@@ -2317,8 +2643,28 @@ function UploadProductDialog({
       <section className="modal-dialog stack" role="dialog" aria-modal="true" aria-labelledby="upload-products-title">
         <div>
           <h2 id="upload-products-title">Upload Product</h2>
-          <p className="modal-copy">Upload .xls or .xlsx product data.</p>
+          <p className="modal-copy">
+            {campaignMode
+              ? "Campaign uploads store Column C as discounted price overrides. RRP stays from the default price book."
+              : "Leave campaign blank to update Default Price Book."}
+          </p>
         </div>
+        <label className="field">
+          <span>Select / Add campaign</span>
+          <input
+            className="input"
+            list="upload-campaign-options"
+            onChange={(event) => updateCampaignDraft(event.target.value)}
+            placeholder="Optional campaign name"
+            suppressHydrationWarning
+            value={campaignDraft}
+          />
+          <datalist id="upload-campaign-options">
+            {campaigns.map((campaign) => (
+              <option key={campaign.id} value={campaign.name} />
+            ))}
+          </datalist>
+        </label>
         <label className="field">
           <span>Excel file</span>
           <input ref={fileInputRef} accept=".xls,.xlsx" className="input" type="file" />
@@ -2691,6 +3037,117 @@ function ManageTagDialog({
               </div>
             </div>
           </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ManageCampaignDialog({
+  busy,
+  campaigns,
+  onClose,
+  onCreateCampaign,
+  onDeleteCampaign,
+  onRenameCampaign
+}: {
+  busy: boolean;
+  campaigns: Campaign[];
+  onClose: () => void;
+  onCreateCampaign: (name: string) => Promise<Campaign | null>;
+  onDeleteCampaign: (campaignId: string) => void;
+  onRenameCampaign: (campaignId: string, name: string) => void;
+}) {
+  const [newCampaignName, setNewCampaignName] = useState("");
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busy) onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [busy, onClose]);
+
+  async function createCampaign() {
+    const campaign = await onCreateCampaign(newCampaignName);
+    if (campaign) setNewCampaignName("");
+  }
+
+  function startRename(campaign: Campaign) {
+    setEditingCampaignId(campaign.id);
+    setRenameDraft(campaign.name);
+  }
+
+  function saveRename() {
+    if (!editingCampaignId || !renameDraft.trim()) return;
+    onRenameCampaign(editingCampaignId, renameDraft);
+    setEditingCampaignId(null);
+    setRenameDraft("");
+  }
+
+  return (
+    <div className="modal-overlay" role="presentation">
+      <section className="modal-dialog stack tag-manager-dialog" role="dialog" aria-modal="true" aria-labelledby="manage-campaign-title">
+        <div className="panel-title-row">
+          <div>
+            <h2 id="manage-campaign-title">Manage Campaign</h2>
+            <p className="modal-copy">Create, rename, or delete campaign price books.</p>
+          </div>
+          <button className="small-button secondary" disabled={busy} onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+        <div className="campaign-create-row">
+          <input
+            className="input"
+            onChange={(event) => setNewCampaignName(event.target.value)}
+            placeholder="New campaign name"
+            suppressHydrationWarning
+            value={newCampaignName}
+          />
+          <button className="small-button" disabled={busy || !newCampaignName.trim()} onClick={createCampaign} type="button">
+            Add
+          </button>
+        </div>
+        {campaigns.length === 0 ? (
+          <p className="muted-text">No campaigns yet.</p>
+        ) : (
+          <div className="tag-manager-list">
+            {campaigns.map((campaign) => (
+              <div className="tag-manager-item" key={campaign.id}>
+                {editingCampaignId === campaign.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      className="table-input"
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      suppressHydrationWarning
+                      value={renameDraft}
+                    />
+                    <button className="small-button" disabled={busy || !renameDraft.trim()} onClick={saveRename} type="button">
+                      Save
+                    </button>
+                    <button className="small-button secondary" disabled={busy} onClick={() => setEditingCampaignId(null)} type="button">
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="tag-chip">{campaign.name}</span>
+                    <button className="small-button secondary" disabled={busy} onClick={() => startRename(campaign)} type="button">
+                      Edit
+                    </button>
+                    <button className="small-button danger" disabled={busy} onClick={() => onDeleteCampaign(campaign.id)} type="button">
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </div>

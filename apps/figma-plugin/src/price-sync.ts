@@ -341,8 +341,8 @@ function looksLikeProductName(text: string): boolean {
   if (value.split(/\s+/).length > 6) return false;
   if (isIgnorableColorLabel(value)) return false;
   if (isPromoOrCtaLabel(value)) return false;
+  if (isAccessoryLikeName(value)) return hasModelLikeToken(value);
   if (isSpecOrFeatureLabel(value)) return false;
-  if (isAccessoryLikeName(value)) return false;
   if (!/[A-Za-z]/.test(value)) return false;
   if (/[.!?]/.test(value)) return false;
   if (!hasModelLikeToken(value)) return false;
@@ -382,8 +382,7 @@ function shouldReviewUnmatchedName(value: string): boolean {
   if (text.split(/\s+/).length > 6) return false;
   if (/[.!?]/.test(text)) return false;
   if (isPromoOrCtaLabel(text)) return false;
-  if (isSpecOrFeatureLabel(text)) return false;
-  if (isAccessoryLikeName(text)) return false;
+  if (!isAccessoryLikeName(text) && isSpecOrFeatureLabel(text)) return false;
   if (!hasModelLikeToken(text)) return false;
   return true;
 }
@@ -486,6 +485,10 @@ function normalizeWhitespace(value: string): string {
 function normalizeNameForMatch(value: string): string {
   return normalizeWhitespace(value)
     .toLowerCase()
+    .replace(/[äàáâãå]/g, "a")
+    .replace(/[öòóôõø]/g, "o")
+    .replace(/[üùúû]/g, "u")
+    .replace(/ß/g, "ss")
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/-/g, " ")
@@ -549,10 +552,13 @@ export function matchProduct(nameText: string, products: Product[]): { product: 
   const queryTokens = nameTokens(nameText);
   if (!query || queryTokens.length === 0) return null;
   const querySeriesSignature = jSeriesModelSignature(nameText);
+  const queryIsAccessory = isAccessoryLikeName(nameText);
+  const queryAccessoryTokens = accessoryMatchTokens(nameText);
 
   let best: { compactSkuMatch: boolean; product: Product; score: number } | null = null;
   for (const product of products) {
-    if (isAccessoryLikeName(product.productName)) continue;
+    const candidateIsAccessory = isAccessoryLikeName(product.productName);
+    if (queryIsAccessory !== candidateIsAccessory) continue;
     const candidate = normalizeNameForMatch(product.productName);
     const candidateTokens = nameTokens(product.productName);
     if (!candidate || candidateTokens.length === 0) continue;
@@ -564,6 +570,10 @@ export function matchProduct(nameText: string, products: Product[]): { product: 
     const sharedModelTokens = queryTokens.filter((token) => /\d/.test(token) && candidateTokens.includes(token));
     const hasModelToken = sharedModelTokens.length > 0;
     const hasStrongModelToken = sharedModelTokens.some((token) => token.length >= 6);
+    const candidateAccessoryTokens = queryIsAccessory ? accessoryMatchTokens(product.productName) : [];
+    const sharedAccessoryTokens = queryAccessoryTokens.filter((token) => candidateAccessoryTokens.includes(token));
+
+    if (queryIsAccessory && (!hasModelToken || sharedAccessoryTokens.length === 0)) continue;
 
     const passesDefaultGate = subsetRatio >= 0.75 && hasModelToken;
     const passesAliasGate = subsetRatio >= 0.3 && hasStrongModelToken;
@@ -571,19 +581,64 @@ export function matchProduct(nameText: string, products: Product[]): { product: 
       hasModelToken &&
       candidateTokens.length <= 3 &&
       candidateTokens.every((token) => queryTokens.includes(token));
-    if (!passesDefaultGate && !passesAliasGate && !passesCompactSkuGate) continue;
+    const passesAccessoryGate = queryIsAccessory && hasModelToken && sharedAccessoryTokens.length > 0 && subsetRatio >= 0.25;
+    if (!passesDefaultGate && !passesAliasGate && !passesCompactSkuGate && !passesAccessoryGate) continue;
 
     const jaccard = overlap / new Set([...queryTokens, ...candidateTokens]).size;
     const substringBoost = candidate.includes(query) || query.includes(candidate) ? 0.2 : 0;
     const modelBoost = hasStrongModelToken ? 0.22 : hasModelToken ? 0.12 : 0;
     const compactSkuBoost = passesCompactSkuGate ? 0.18 : 0;
     const seriesBoost = querySeriesSignature && candidateSeriesSignature === querySeriesSignature ? 0.25 : 0;
-    const score = jaccard + substringBoost + subsetRatio * 0.25 + modelBoost + compactSkuBoost + seriesBoost;
+    const accessoryBoost = sharedAccessoryTokens.length * 0.2;
+    const score = jaccard + substringBoost + subsetRatio * 0.25 + modelBoost + compactSkuBoost + seriesBoost + accessoryBoost;
     if (!best || score > best.score) best = { compactSkuMatch: passesCompactSkuGate, product, score };
   }
-  const threshold = best?.compactSkuMatch ? COMPACT_SKU_PRICE_MATCH_THRESHOLD : PRICE_MATCH_THRESHOLD;
+  const threshold = queryIsAccessory ? 0.5 : best?.compactSkuMatch ? COMPACT_SKU_PRICE_MATCH_THRESHOLD : PRICE_MATCH_THRESHOLD;
   if (!best || best.score < threshold) return null;
   return best;
+}
+
+function accessoryMatchTokens(value: string): string[] {
+  const normalized = normalizeNameForMatch(value)
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+  const tokens = new Set<string>();
+  const patterns: Array<[RegExp, string]> = [
+    [/\bzubehor(?:set|satz)?\b/, "zubehor"],
+    [/\baccessor(?:y|ies)\b/, "zubehor"],
+    [/\bkit\b/, "zubehor"],
+    [/\bhepa\b/, "hepa"],
+    [/\bfilter\b/, "filter"],
+    [/\bseitenburste\b/, "seitenburste"],
+    [/\bside-?brush\b/, "seitenburste"],
+    [/\bhauptrollenburste\b/, "hauptrollenburste"],
+    [/\bhauptburste\b/, "hauptrollenburste"],
+    [/\bmain-?brush\b/, "hauptrollenburste"],
+    [/\bburstenwalze\b/, "hauptrollenburste"],
+    [/\brollerburste\b/, "rollerburste"],
+    [/\brollenburste\b/, "rollerburste"],
+    [/\bbrush\b/, "burste"],
+    [/\bburste\b/, "burste"],
+    [/\bwisch(?:tucher|tiicher)\b/, "wischtucher"],
+    [/\bwischmopp\b/, "mopp"],
+    [/\bmopp\b/, "mopp"],
+    [/\bmop\b/, "mopp"],
+    [/\bmop-?pad\b/, "mopp"],
+    [/\bpad\b/, "mopp"],
+    [/\bstaub(?:sauger)?beutel\b/, "staubbeutel"],
+    [/\bdust-?bag\b/, "staubbeutel"],
+    [/\bbeutel\b/, "staubbeutel"],
+    [/\bbag\b/, "staubbeutel"],
+    [/\bschwamm\b/, "schwamm"],
+    [/\bluftkanal(?:e)?\b/, "luftkanal"],
+    [/\breinigungslosung\b/, "reinigungslosung"],
+    [/\bbodenreinigungslosung\b/, "reinigungslosung"],
+    [/\bcleaning-?solution\b/, "reinigungslosung"]
+  ];
+  for (const [pattern, token] of patterns) {
+    if (pattern.test(normalized)) tokens.add(token);
+  }
+  return [...tokens];
 }
 
 function jSeriesModelSignature(value: string): string | null {

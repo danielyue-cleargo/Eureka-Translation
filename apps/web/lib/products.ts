@@ -21,7 +21,11 @@ export type ProductUploadPreview = {
   products: ProductUploadRow[];
 };
 
-export function parseProductWorkbook(buffer: ArrayBuffer, existingProducts: Product[] = []): ProductUploadPreview {
+export function parseProductWorkbook(
+  buffer: ArrayBuffer,
+  existingProducts: Product[] = [],
+  options: { campaignMode?: boolean; existingCampaignProductNames?: string[] } = {}
+): ProductUploadPreview {
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
@@ -31,6 +35,7 @@ export function parseProductWorkbook(buffer: ArrayBuffer, existingProducts: Prod
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { blankrows: false, header: 1, raw: false });
   const existingNames = new Set(existingProducts.map((product) => normalizeProductNameKey(product.productName)));
+  const existingCampaignNames = new Set((options.existingCampaignProductNames ?? []).map((name) => normalizeProductNameKey(name)));
   const seenUploadNames = new Map<string, string>();
   const duplicates = new Set<string>();
   const errors: ProductUploadError[] = [];
@@ -49,7 +54,11 @@ export function parseProductWorkbook(buffer: ArrayBuffer, existingProducts: Prod
     }
     if (isAccessoryProductName(productName)) return;
     const key = normalizeProductNameKey(productName);
-    if (existingNames.has(key) || seenUploadNames.has(key)) duplicates.add(productName);
+    if (options.campaignMode && !existingNames.has(key)) {
+      errors.push({ message: "Product must exist in the default price book before adding a campaign price.", rowNumber });
+      return;
+    }
+    if ((!options.campaignMode && existingNames.has(key)) || existingCampaignNames.has(key) || seenUploadNames.has(key)) duplicates.add(productName);
     seenUploadNames.set(key, productName);
     products.push({ discountedPrice, priceDifference: calculatePriceDifference(rrp, discountedPrice), productName, rowNumber, rrp });
   });

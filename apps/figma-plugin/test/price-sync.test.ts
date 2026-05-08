@@ -99,6 +99,61 @@ test("price sync assigns second-row OFF badges to their own card", () => {
   assert.equal(plan.replacementsBySourceNodeId.get("off_bottom"), "€230");
 });
 
+test("price sync uses effective campaign discount with default rrp", () => {
+  const campaignProduct: Product = {
+    ...makeProduct("J15 Ultra White", 799.99, 299),
+    defaultDiscountedPrice: 499,
+    hasCampaignPrice: true
+  };
+  const plan = buildPriceSyncPlanFromNodes([
+    node("name", "Eureka J15 Ultra Roboterstaubsauger", 549, 29, 420, 30),
+    price("discounted", "€499,00", 549, 233),
+    price("rrp", "€799,99", 631, 237, "STRIKETHROUGH"),
+    price("off", "€301", 10, 31),
+    label("off_label", "OFF", 20, 49)
+  ], [campaignProduct]);
+
+  assert.equal(plan.summary.matched, 1);
+  assert.equal(plan.replacementsBySourceNodeId.get("discounted"), "€299,00");
+  assert.equal(plan.replacementsBySourceNodeId.get("off"), "€501");
+});
+
+test("price sync matches German accessory product names", () => {
+  const products = [
+    makeProduct("J15 Pro Ultra-BK", 849, 399),
+    makeProduct("eureka-j15-pro-ultra-staubbeutel-3", 29.99, 19.99),
+    makeProduct("eureka-j15-pro-ultra-zubehorset", 89.99, 59.99),
+    makeProduct("eureka-j15-evo-ultra-hauptrollenburste", 49.99, 39.99)
+  ];
+
+  assert.equal(matchProduct("Eureka J15 Staubbeutel*3", products)?.product.productName, "eureka-j15-pro-ultra-staubbeutel-3");
+  assert.equal(matchProduct("J15Pro Ultra Zubehörset", products)?.product.productName, "eureka-j15-pro-ultra-zubehorset");
+  assert.equal(
+    matchProduct("J15 Evo Ultra Hauptrollenbürste", products)?.product.productName,
+    "eureka-j15-evo-ultra-hauptrollenburste"
+  );
+});
+
+test("price sync does not match normal product cards to accessories", () => {
+  const products = [
+    makeProduct("eureka-j15-pro-ultra-staubbeutel-3", 29.99, 19.99),
+    makeProduct("J15 Pro Ultra-BK", 849, 399)
+  ];
+
+  assert.equal(matchProduct("Eureka J15 Pro Ultra Roboterstaubsauger", products)?.product.productName, "J15 Pro Ultra-BK");
+});
+
+test("price sync can build replacements for accessory cards", () => {
+  const plan = buildPriceSyncPlanFromNodes([
+    node("name", "Eureka J15 Staubbeutel*3", 549, 29, 260, 30),
+    price("discounted", "€29,99", 549, 233),
+    price("rrp", "€39,99", 631, 237, "STRIKETHROUGH")
+  ], [makeProduct("eureka-j15-pro-ultra-staubbeutel-3", 39.99, 19.99)]);
+
+  assert.equal(plan.summary.matched, 1);
+  assert.equal(plan.replacementsBySourceNodeId.get("discounted"), "€19,99");
+});
+
 function productName(id: string, x: number, y: number): RawTextNode {
   return node(id, "Eureka J12 Ultra Saugroboter", x, y, 250, 60);
 }

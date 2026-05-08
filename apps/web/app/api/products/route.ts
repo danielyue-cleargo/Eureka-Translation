@@ -3,7 +3,7 @@ import type { Product } from "@eu-translation/shared";
 import { createId } from "@eu-translation/shared";
 import { calculatePriceDifference, normalizeProductName, parsePrice, productRowsToProducts, type ProductUploadRow } from "@/lib/products";
 import { DEFAULT_PROJECT_ID, store } from "@/lib/store";
-import { isSupabaseSyncEnabled, syncProducts } from "@/lib/supabase-sync";
+import { deleteCampaignProductPriceFromCloud, isSupabaseSyncEnabled, syncCampaignPriceBooks, syncProducts } from "@/lib/supabase-sync";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,18 +21,27 @@ export async function OPTIONS() {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId") || DEFAULT_PROJECT_ID;
+  const campaignId = searchParams.get("campaignId") || "";
   if (isSupabaseSyncEnabled()) {
     const sync = await syncProducts(projectId);
-    return jsonWithCors({ conflicts: sync.conflicts ?? [], products: sync.products, sync: syncStatusPayload(sync) });
+    return jsonWithCors({ conflicts: sync.conflicts ?? [], products: campaignId ? store.listEffectiveProducts(projectId, campaignId) : sync.products, sync: syncStatusPayload(sync) });
   }
-  return jsonWithCors({ products: store.listProducts(projectId) });
+  return jsonWithCors({ products: campaignId ? store.listEffectiveProducts(projectId, campaignId) : store.listProducts(projectId) });
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const projectId = String(body.projectId || DEFAULT_PROJECT_ID);
+    const campaignId = String(body.campaignId || "").trim();
     const override = Boolean(body.override);
+    if (campaignId) {
+      const rows = readProductRows(body);
+      if (rows.length === 0) throw new Error("No products to save");
+      const saved = store.upsertCampaignProductPrices(projectId, campaignId, rows, override);
+      if (isSupabaseSyncEnabled()) await syncCampaignPriceBooks(projectId);
+      return jsonWithCors({ products: saved, savedCount: rows.length });
+    }
     const products = readProducts(body, projectId);
     if (products.length === 0) throw new Error("No products to save");
     const saved = store.upsertProducts(projectId, products, override);
@@ -47,8 +56,15 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const projectId = String(body.projectId || DEFAULT_PROJECT_ID);
+    const campaignId = String(body.campaignId || "").trim();
     const productId = String(body.productId || "").trim();
     if (!productId) throw new Error("Product id is required");
+    if (campaignId) {
+      const discountedPrice = parsePrice(body.discountedPrice);
+      const products = store.upsertCampaignProductPrice(projectId, campaignId, productId, discountedPrice);
+      if (isSupabaseSyncEnabled()) await syncCampaignPriceBooks(projectId);
+      return jsonWithCors({ products });
+    }
     const productName = normalizeProductName(body.productName);
     const rrp = parsePrice(body.rrp);
     const discountedPrice = parsePrice(body.discountedPrice);
@@ -65,8 +81,14 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json();
     const projectId = String(body.projectId || DEFAULT_PROJECT_ID);
+    const campaignId = String(body.campaignId || "").trim();
     const productId = String(body.productId || "").trim();
     if (!productId) throw new Error("Product id is required");
+    if (campaignId) {
+      const products = store.deleteCampaignProductPrice(projectId, campaignId, productId);
+      if (isSupabaseSyncEnabled()) await deleteCampaignProductPriceFromCloud(projectId, campaignId, productId);
+      return jsonWithCors({ products });
+    }
     const current = store.listProducts(projectId);
     const deletedProducts = current
       .filter((product) => product.id === productId)
@@ -91,16 +113,7 @@ function jsonWithCors(body: unknown, init?: ResponseInit) {
 
 function readProducts(body: any, projectId: string): Product[] {
   if (Array.isArray(body.rows)) {
-    const rows = body.rows
-      .map((row: any, index: number): ProductUploadRow | null => {
-        const productName = normalizeProductName(row.productName);
-        const rrp = parsePrice(row.rrp);
-        const discountedPrice = parsePrice(row.discountedPrice);
-        if (!productName) return null;
-        return { discountedPrice, priceDifference: calculatePriceDifference(rrp, discountedPrice), productName, rowNumber: Number(row.rowNumber ?? index + 1), rrp };
-      })
-      .filter((row: ProductUploadRow | null): row is ProductUploadRow => Boolean(row));
-    return productRowsToProducts(rows, projectId);
+    return productRowsToProducts(readProductRows(body), projectId);
   }
 
   const productName = normalizeProductName(body.productName);
@@ -118,6 +131,19 @@ function readProducts(body: any, projectId: string): Product[] {
       updatedAt: new Date().toISOString()
     }
   ];
+}
+
+function readProductRows(body: any): ProductUploadRow[] {
+  if (!Array.isArray(body.rows)) return [];
+  return body.rows
+    .map((row: any, index: number): ProductUploadRow | null => {
+      const productName = normalizeProductName(row.productName);
+      const rrp = parsePrice(row.rrp);
+      const discountedPrice = parsePrice(row.discountedPrice);
+      if (!productName) return null;
+      return { discountedPrice, priceDifference: calculatePriceDifference(rrp, discountedPrice), productName, rowNumber: Number(row.rowNumber ?? index + 1), rrp };
+    })
+    .filter((row: ProductUploadRow | null): row is ProductUploadRow => Boolean(row));
 }
 
 async function syncAfterLocalChange(projectId: string, fallbackProducts: Product[], deletedProducts: Product[] = []) {
