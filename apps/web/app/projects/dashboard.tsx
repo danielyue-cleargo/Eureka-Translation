@@ -2591,7 +2591,6 @@ function UploadProductDialog({
   const [rows, setRows] = useState<ProductUploadRow[]>([]);
   const [campaignDraft, setCampaignDraft] = useState("");
   const [status, setStatus] = useState("Excel format: Column A Product Name, Column B RRP, Column C Discounted Price.");
-  const campaignMode = Boolean(campaignDraft.trim());
 
   async function resolveCampaignDraft(): Promise<string> {
     const name = campaignDraft.trim();
@@ -2677,16 +2676,19 @@ function UploadProductDialog({
       <section className="modal-dialog stack" role="dialog" aria-modal="true" aria-labelledby="upload-products-title">
         <div>
           <h2 id="upload-products-title">Upload Product</h2>
-          <p className="modal-copy">
-            Campaign uploads store Column C as discounted price overrides. RRP stays from the default price book.
-          </p>
-          <p className="modal-copy">
-            <a href="https://docs.google.com/spreadsheets/d/1WoIGjloo_t99AOljaYY3RHnWxFVDxfivG-Gy6sViagg/edit?usp=sharing" rel="noopener noreferrer" target="_blank">
-              Sample spreadsheet (Google Sheets)
-            </a>{" "}
-            — teammates can edit online and export their own campaign Excel.
-          </p>
-          {!campaignMode ? <p className="modal-copy">Leave campaign blank to update Default Price Book.</p> : null}
+          <div className="upload-product-hint-callout">
+            <ul>
+              <li>Campaign uploads store Column C as discounted price overrides. RRP stays from the default price book.</li>
+              <li>
+                <a href="https://docs.google.com/spreadsheets/d/1WoIGjloo_t99AOljaYY3RHnWxFVDxfivG-Gy6sViagg/edit?usp=sharing" rel="noopener noreferrer" target="_blank">
+                  Sample spreadsheet (Google Sheets)
+                </a>
+                {" "}
+                — teammates can edit online and export their own campaign Excel.
+              </li>
+              <li>Leave campaign blank to update Default Price Book.</li>
+            </ul>
+          </div>
         </div>
         <label className="field">
           <span>Select / Add campaign</span>

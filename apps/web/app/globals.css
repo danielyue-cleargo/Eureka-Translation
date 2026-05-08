@@ -1150,6 +1150,41 @@ select:focus-visible {
   margin: 0;
 }
 
+.upload-product-hint-callout {
+  background: var(--panel-blue);
+  border: 1px solid rgba(98, 174, 240, 0.45);
+  border-radius: 8px;
+  margin: 0 0 4px;
+  padding: 12px 14px 12px 12px;
+}
+
+.upload-product-hint-callout ul {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 1.35em;
+}
+
+.upload-product-hint-callout li {
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+
+.upload-product-hint-callout li:last-child {
+  margin-bottom: 0;
+}
+
+.upload-product-hint-callout a {
+  color: var(--accent-dark);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.upload-product-hint-callout a:hover {
+  color: var(--accent-navy);
+}
+
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
