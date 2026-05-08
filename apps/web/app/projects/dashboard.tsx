@@ -50,6 +50,11 @@ const disconnectedApiStatus: ApiConnectionStatus = {
 const LIBRARY_PAGE_SIZE = 20;
 const TAG_MANAGER_PAGE_SIZE = 10;
 
+/** Ensures <input value> is never undefined (React controlled input requirement). */
+function inputString(value: unknown): string {
+  return value == null ? "" : String(value);
+}
+
 export function Dashboard() {
   const [activePage, setActivePage] = useState<"home" | "library" | "products" | "setting">("home");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -677,7 +682,7 @@ export function Dashboard() {
             setLocalizedUrls={setLocalizedUrls}
             setSourceUrl={setSourceUrl}
             setSyncLocalizedSources={setSyncLocalizedSources}
-            sourceUrl={sourceUrl}
+            sourceUrl={sourceUrl ?? ""}
             localizedUrls={localizedUrls}
             fileInputRef={fileInputRef}
             syncLocalizedSources={syncLocalizedSources}
@@ -838,7 +843,15 @@ function HomePage({
   syncLocalizedSources: boolean;
 }) {
   const [sourceTab, setSourceTab] = useState<"url" | "file">("url");
+  const [productUrlDraft, setProductUrlDraft] = useState(() => inputString(sourceUrl));
   const hasGeneratedTranslation = extractedTerms.length > 0;
+  const emptyLocaleMap: Record<Locale, string> = { DE: "", FR: "", IT: "", ES: "" };
+  const safeLocalizedUrls = { ...emptyLocaleMap, ...(localizedUrls ?? {}) };
+  const safeSyncLocalizedSources = Boolean(syncLocalizedSources);
+
+  useEffect(() => {
+    setProductUrlDraft(inputString(sourceUrl));
+  }, [sourceUrl]);
 
   function cancelAndReset() {
     cancelGeneratedTranslation();
@@ -878,15 +891,18 @@ function HomePage({
                 <input
                   className="input"
                   placeholder="https://de.eureka.com/products/eureka-j15-max-ultra"
-                  suppressHydrationWarning
-                  value={sourceUrl ?? ""}
-                  onChange={(event) => setSourceUrl(event.target.value)}
+                  value={productUrlDraft ?? ""}
+                  onChange={(event) => {
+                    const next = inputString(event.target.value);
+                    setProductUrlDraft(next);
+                    setSourceUrl(next);
+                  }}
                 />
               </label>
               <div className="check-field">
                 <label className="check-row">
                   <input
-                    checked={syncLocalizedSources}
+                    checked={safeSyncLocalizedSources}
                     onChange={(event) => setSyncLocalizedSources(event.target.checked)}
                     suppressHydrationWarning
                     type="checkbox"
@@ -895,7 +911,7 @@ function HomePage({
                 </label>
                 <p>AI will cross-reference terms from all provided regional URLs to build a unified translation table.</p>
               </div>
-              {syncLocalizedSources ? (
+              {safeSyncLocalizedSources ? (
                 <div className="locale-url-grid">
                   {locales.map((locale) => (
                     <label className="field" key={locale}>
@@ -904,11 +920,11 @@ function HomePage({
                         className="input"
                         placeholder={`https://example.com/${locale.toLocaleLowerCase()}/product`}
                         suppressHydrationWarning
-                        value={localizedUrls[locale] ?? ""}
+                        value={inputString(safeLocalizedUrls[locale])}
                         onChange={(event) =>
                           setLocalizedUrls({
-                            ...localizedUrls,
-                            [locale]: event.target.value
+                            ...safeLocalizedUrls,
+                            [locale]: inputString(event.target.value)
                           })
                         }
                       />
