@@ -879,7 +879,7 @@ function HomePage({
                   className="input"
                   placeholder="https://de.eureka.com/products/eureka-j15-max-ultra"
                   suppressHydrationWarning
-                  value={sourceUrl}
+                  value={sourceUrl ?? ""}
                   onChange={(event) => setSourceUrl(event.target.value)}
                 />
               </label>
@@ -904,7 +904,7 @@ function HomePage({
                         className="input"
                         placeholder={`https://example.com/${locale.toLocaleLowerCase()}/product`}
                         suppressHydrationWarning
-                        value={localizedUrls[locale]}
+                        value={localizedUrls[locale] ?? ""}
                         onChange={(event) =>
                           setLocalizedUrls({
                             ...localizedUrls,
@@ -2446,7 +2446,7 @@ function ProductsPanel({
           campaigns={campaigns}
           onCreateCampaign={onCreateCampaign}
           onUpload={async (rows, override) => {
-            await onUploadProducts(rows, override, selectedCampaignId);
+            await onUploadProducts(rows, override, "");
             setUploadOpen(false);
           }}
           onUploadToCampaign={async (rows, override, campaignId) => {
@@ -2454,7 +2454,6 @@ function ProductsPanel({
             onSelectCampaign(campaignId);
             setUploadOpen(false);
           }}
-          selectedCampaignId={selectedCampaignId}
         />
       ) : null}
       {campaignManagerOpen ? (
@@ -2577,8 +2576,7 @@ function UploadProductDialog({
   onClose,
   onCreateCampaign,
   onUpload,
-  onUploadToCampaign,
-  selectedCampaignId
+  onUploadToCampaign
 }: {
   busy: boolean;
   campaigns: Campaign[];
@@ -2586,14 +2584,12 @@ function UploadProductDialog({
   onCreateCampaign: (name: string) => Promise<Campaign | null>;
   onUpload: (rows: ProductUploadRow[], override?: boolean) => Promise<void>;
   onUploadToCampaign: (rows: ProductUploadRow[], override: boolean, campaignId: string) => Promise<void>;
-  selectedCampaignId: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [duplicates, setDuplicates] = useState<string[]>([]);
   const [errors, setErrors] = useState<Array<{ message: string; rowNumber: number }>>([]);
   const [rows, setRows] = useState<ProductUploadRow[]>([]);
-  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId);
-  const [campaignDraft, setCampaignDraft] = useState(selectedCampaign?.name ?? "");
+  const [campaignDraft, setCampaignDraft] = useState("");
   const [status, setStatus] = useState("Excel format: Column A Product Name, Column B RRP, Column C Discounted Price.");
   const campaignMode = Boolean(campaignDraft.trim());
 
@@ -2682,10 +2678,15 @@ function UploadProductDialog({
         <div>
           <h2 id="upload-products-title">Upload Product</h2>
           <p className="modal-copy">
-            {campaignMode
-              ? "Campaign uploads store Column C as discounted price overrides. RRP stays from the default price book."
-              : "Leave campaign blank to update Default Price Book."}
+            Campaign uploads store Column C as discounted price overrides. RRP stays from the default price book.
           </p>
+          <p className="modal-copy">
+            <a href="https://docs.google.com/spreadsheets/d/1WoIGjloo_t99AOljaYY3RHnWxFVDxfivG-Gy6sViagg/edit?usp=sharing" rel="noopener noreferrer" target="_blank">
+              Sample spreadsheet (Google Sheets)
+            </a>{" "}
+            — teammates can edit online and export their own campaign Excel.
+          </p>
+          {!campaignMode ? <p className="modal-copy">Leave campaign blank to update Default Price Book.</p> : null}
         </div>
         <label className="field">
           <span>Select / Add campaign</span>
@@ -2693,7 +2694,7 @@ function UploadProductDialog({
             className="input"
             list="upload-campaign-options"
             onChange={(event) => updateCampaignDraft(event.target.value)}
-            placeholder="Optional campaign name"
+            placeholder="Type to add campaign or select a campaign"
             suppressHydrationWarning
             value={campaignDraft}
           />

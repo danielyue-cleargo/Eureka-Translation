@@ -231,6 +231,25 @@
         gap: 8px;
       }
 
+      .section-divider {
+        border: 0;
+        border-top: 1px solid var(--figma-color-border);
+        margin: 6px 0;
+        width: 100%;
+      }
+
+      .plugin-section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .plugin-section-title {
+        color: var(--figma-color-text);
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+      }
+
       .price-book-row {
         display: grid;
         gap: 6px;
@@ -255,26 +274,33 @@
         <button class="icon-button" id="settingsButton" title="Settings" type="button" aria-label="Settings">&#9881;</button>
       </div>
       <section class="stack view" id="translateView">
-        <div class="apply-options">
-          <label><input checked id="translateToNewFrame" type="checkbox" /> Translate to a new frame</label>
-        </div>
-        <div class="stack">
-          <div class="section-title" id="languageTitle">Choose language(s) to translate</div>
-          <div class="language-row" aria-label="Target languages">
-            <label><input checked type="checkbox" value="DE" class="locale" /> DE</label>
-            <label><input checked type="checkbox" value="FR" class="locale" /> FR</label>
-            <label><input checked type="checkbox" value="IT" class="locale" /> IT</label>
-            <label><input checked type="checkbox" value="ES" class="locale" /> ES</label>
+        <div class="plugin-section">
+          <h2 class="plugin-section-title">Translate</h2>
+          <div class="apply-options">
+            <label><input checked id="translateToNewFrame" type="checkbox" /> Translate to a new frame</label>
           </div>
+          <div class="stack">
+            <div class="section-title" id="languageTitle">Choose language(s) to translate</div>
+            <div class="language-row" aria-label="Target languages">
+              <label><input checked type="checkbox" value="DE" class="locale" /> DE</label>
+              <label><input checked type="checkbox" value="FR" class="locale" /> FR</label>
+              <label><input checked type="checkbox" value="IT" class="locale" /> IT</label>
+              <label><input checked type="checkbox" value="ES" class="locale" /> ES</label>
+            </div>
+          </div>
+          <button id="generateApply">Translate Selected Frame</button>
         </div>
-        <button id="generateApply">Translate Selected Frame</button>
-        <label class="price-book-row">
-          <span class="section-title">Price book</span>
-          <select id="priceBookSelect">
-            <option value="">Default Price Book</option>
-          </select>
-        </label>
-        <button class="secondary-button" id="syncProductPriceButton" type="button">Synchronize product price with price book</button>
+        <hr class="section-divider" aria-hidden="true" />
+        <div class="plugin-section">
+          <h2 class="plugin-section-title">Price Sync</h2>
+          <label class="price-book-row">
+            <span class="section-title">Price book</span>
+            <select id="priceBookSelect">
+              <option value="">Default Price Book</option>
+            </select>
+          </label>
+          <button class="secondary-button" id="syncProductPriceButton" type="button">Synchronize product price with price book</button>
+        </div>
         <div class="cta-status" id="ctaStatus"></div>
       </section>
       <section class="progress-panel" id="progressPanel" hidden>

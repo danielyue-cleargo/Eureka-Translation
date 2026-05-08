@@ -52,9 +52,12 @@ test("figma translation prompt is tuned for ecommerce marketing copy", () => {
   assert.match(instructions, /Frische Empfehlungen/);
   assert.match(instructions, /Preserve emoji/);
   assert.match(instructions, /Translate sale, CTA, and marketing labels/);
-  assert.match(instructions, /Flash Sale/);
-  assert.match(instructions, /Blitzangebot/);
-  assert.match(instructions, /Shop Now/);
+  assert.match(instructions, /act as the translator for every requested target locale/);
+  assert.match(instructions, /Do not leave English promo headlines/);
+  assert.match(instructions, /Acheter maintenant/);
+  assert.match(instructions, /Acquista ora/);
+  assert.match(instructions, /Comprar ahora/);
+  assert.match(instructions, /Shop now/);
   assert.match(instructions, /Jetzt kaufen/);
   assert.match(instructions, /€200 OFF/);
   assert.match(instructions, /standalone discount label/);
@@ -64,6 +67,7 @@ test("figma translation prompt is tuned for ecommerce marketing copy", () => {
   assert.match(instructions, /only type=specification/);
   assert.match(instructions, /Do not force partial replacement from specificationReferences/);
   assert.match(instructions, /specification titles/);
+  assert.match(instructions, /equally natural French, Italian, and Spanish/);
   assert.doesNotMatch(instructions, /Preserve .*sale labels/i);
 });
 

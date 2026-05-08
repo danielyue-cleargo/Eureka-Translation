@@ -241,13 +241,14 @@ export function figmaTranslationInstructions(targetLocales: readonly Locale[]): 
     "For non-glossary wording, translate as natural product marketing copy, not literal dictionary wording.",
     "Preserve emoji, model names, brand terms, currency values, prices, discount amounts, numeric specs, and units.",
     "Translate sale, CTA, and marketing labels naturally; do not leave them in English unless they are approved glossary terms.",
-    "Translate examples: \"Flash Sale\" -> DE \"Blitzangebot\" or \"Flash Sale Aktion\" depending context; \"Mother’s Day Flash Sale\" -> DE \"Muttertags-Blitzangebot\"; \"Shop Now\" -> DE \"Jetzt kaufen\".",
+    "When there is no glossary match for a layer, act as the translator for every requested target locale: output natural, idiomatic marketing and CTA copy in each of DE, FR, IT, and ES (as requested). Do not leave English promo headlines, short sale banners, or button labels in FR, IT, or ES unless the approved glossary explicitly requires that English wording for that locale.",
+    "Illustrative parallel patterns when the source is English short marketing text (examples only—not a fixed dictionary): a sale-style headline or promo line should read naturally in German, French, Italian, and Spanish respectively; a generic retail CTA such as \"Shop now\" should become natural in each locale, for example DE \"Jetzt kaufen\", FR \"Acheter maintenant\", IT \"Acquista ora\", ES \"Comprar ahora\".",
     "Preserve \"OFF\" only when it is a standalone discount label or part of discount text such as \"€200 OFF\".",
     "Do not uppercase substrings inside translated words; for example Italian \"offerte\" must not become \"OFFerte\".",
     "For discount text such as \"€200 OFF\", preserve \"€200\" and translate the discount meaning naturally.",
     "Keep translations concise enough for Figma layouts and avoid unnecessary expansion.",
     "\"Refresh Picks\" means refreshed/renewed curated product recommendations or selected favorites, not fresh food or fruit.",
-    "Example: \"🌷 Mother’s Day Refresh Picks 🌷\" should be translated in German like \"🌷 Neue Empfehlungen zum Muttertag 🌷\" or \"🌷 Frisch ausgewählte Muttertags-Favoriten 🌷\". Avoid \"Frische Empfehlungen\".",
+    "Example: \"🌷 Mother’s Day Refresh Picks 🌷\" should become natural festival promo wording per locale (German example: \"🌷 Neue Empfehlungen zum Muttertag 🌷\"); use equally natural French, Italian, and Spanish—not English left in place. Avoid \"Frische Empfehlungen\" in German.",
     "Return only the requested JSON schema."
   ].join("\n");
 }
