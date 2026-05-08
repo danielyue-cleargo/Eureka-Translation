@@ -52,7 +52,6 @@ export function parseProductWorkbook(
       errors.push({ message: "Product Name is required.", rowNumber });
       return;
     }
-    if (isAccessoryProductName(productName)) return;
     const key = normalizeProductNameKey(productName);
     if (options.campaignMode && !existingNames.has(key)) {
       errors.push({ message: "Product must exist in the default price book before adding a campaign price.", rowNumber });
@@ -142,10 +141,31 @@ export function parsePrice(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const raw = String(value ?? "").trim();
   if (!raw) return 0;
-  const normalized = raw.replace(/[,，\s]/g, "").replace(/[^0-9.+-]/g, "");
+  const numeric = raw.replace(/[^0-9.,+-]/g, "");
+  const normalized = normalizePriceSeparators(numeric);
   if (!normalized || normalized === "." || normalized === "-" || normalized === "+") return 0;
   const price = Number(normalized);
   return Number.isFinite(price) ? price : 0;
+}
+
+function normalizePriceSeparators(value: string): string {
+  const cleaned = value.replace(/\s/g, "").replace(/，/g, ",");
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastSeparator = Math.max(lastComma, lastDot);
+  if (lastSeparator < 0) return cleaned;
+
+  const decimals = cleaned.slice(lastSeparator + 1);
+  const integer = cleaned.slice(0, lastSeparator);
+  const hasDecimalSeparator = /^\d{1,2}$/.test(decimals);
+  const hasMixedSeparators = lastComma >= 0 && lastDot >= 0;
+  const hasRepeatedSeparator = (cleaned.match(/[.,]/g) ?? []).length > 1;
+
+  if (hasDecimalSeparator && (decimals.length !== 3 || hasMixedSeparators || !hasRepeatedSeparator)) {
+    return `${integer.replace(/[.,]/g, "")}.${decimals}`;
+  }
+
+  return cleaned.replace(/[.,]/g, "");
 }
 
 export function formatProductPrice(value: number): string {

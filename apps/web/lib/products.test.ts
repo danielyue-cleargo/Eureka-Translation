@@ -47,7 +47,7 @@ test("product workbook reports invalid rows and duplicate names", () => {
   assert.equal(preview.products.find((product) => product.productName === "Eureka J17")?.discountedPrice, 0);
 });
 
-test("product workbook skips accessory rows from product duplicate checks", () => {
+test("product workbook includes accessory rows in the default price book", () => {
   const existing = [makeProduct("product_1", "Eureka J15", 1999, 1499)];
   const preview = parseProductWorkbook(makeWorkbook([
     ["eureka-j15-pro-ultra-hepa", "99", "79"],
@@ -60,8 +60,36 @@ test("product workbook skips accessory rows from product duplicate checks", () =
     ["Eureka J15", "1999", "1499"]
   ]), existing);
 
-  assert.deepEqual(preview.duplicates, ["Eureka J15"]);
-  assert.deepEqual(preview.products.map((product) => product.productName), ["Eureka J15"]);
+  assert.deepEqual(preview.duplicates, ["Eureka J15", "eureka-j15-pro-ultra-hepa"]);
+  assert.deepEqual(preview.products.map((product) => product.productName), [
+    "eureka-j15-pro-ultra-hepa",
+    "eureka-j15-pro-ultra-hepa",
+    "floorshine880-accessory-kit",
+    "eureka-j12-rollerburste",
+    "eureka-j12-staubsaugerbeutel-3",
+    "eureka-j12-mopp-4",
+    "j20-seitenburste-j20-sb",
+    "Eureka J15"
+  ]);
+});
+
+test("product workbook parses accessory rows with EU comma decimal prices", () => {
+  const preview = parseProductWorkbook(makeWorkbook([
+    ["eureka-j15-evo-ultra-hauptrollenburste", "14,99", "14,99"]
+  ]));
+
+  assert.equal(preview.errors.length, 0);
+  assert.deepEqual(preview.products.map((product) => ({
+    productName: product.productName,
+    rrp: product.rrp,
+    discountedPrice: product.discountedPrice
+  })), [
+    {
+      productName: "eureka-j15-evo-ultra-hauptrollenburste",
+      rrp: 14.99,
+      discountedPrice: 14.99
+    }
+  ]);
 });
 
 test("campaign workbook requires products from default price book", () => {
@@ -104,7 +132,9 @@ test("accessory detection does not classify translated robot vacuum names as acc
 
 test("parsePrice strips currency symbols and falls back to zero", () => {
   assert.equal(parsePrice("€2,499.00"), 2499);
+  assert.equal(parsePrice("€2.499,00"), 2499);
   assert.equal(parsePrice("HK$ 1,299"), 1299);
+  assert.equal(parsePrice("14,99"), 14.99);
   assert.equal(parsePrice("abc"), 0);
   assert.equal(parsePrice(""), 0);
 });
