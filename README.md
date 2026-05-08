@@ -26,6 +26,7 @@ Open the web app at `http://localhost:3000`.
 - `OPENAI_VECTOR_STORE_ID`: attaches uploaded PDFs to an OpenAI vector store for File Search retrieval.
 - `FIGMA_ACCESS_TOKEN`: reserved for link-based Figma read access.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: reserved for replacing the in-memory store with Supabase.
+- **App version** (top bar): the dev server calls GitHub to compare your local `git` HEAD with `main` on the configured repo (defaults to this project’s public repo). Requires network access and a normal git clone (with a `.git` folder). After `git pull`, focus the browser tab or wait a few minutes for the check to refresh. Optional: `GITHUB_REPO=owner/name`, `NEXT_PUBLIC_APP_GIT_SHA` when `.git` is not present.
 
 Without an OpenAI key in `Setting` or `.env`, source translation generation is blocked.
 

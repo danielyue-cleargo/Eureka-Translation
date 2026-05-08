@@ -76,6 +76,16 @@ select:focus-visible {
   line-height: 28px;
 }
 
+.topbar-right {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .api-signals {
   align-items: center;
   display: flex;
@@ -125,6 +135,50 @@ select:focus-visible {
 .signal-dot.checking {
   animation: signal-pulse 1s ease-in-out infinite;
   background: var(--warning);
+}
+
+.signal-dot.version-warning {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px rgba(255, 177, 16, 0.18);
+}
+
+.signal-dot.version-ahead {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(98, 174, 240, 0.2);
+}
+
+.signal-dot.version-diverged {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(246, 73, 50, 0.12);
+}
+
+.app-version-signal {
+  gap: 8px;
+  max-width: min(100%, 320px);
+  white-space: normal;
+}
+
+.app-version-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-version-update-button {
+  background: var(--panel-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  min-height: 26px;
+  padding: 4px 10px;
+}
+
+.app-version-update-button:hover {
+  background: var(--panel-blue);
 }
 
 @keyframes signal-pulse {
@@ -1225,6 +1279,24 @@ select:focus-visible {
   gap: 18px;
   justify-content: space-between;
   line-height: 20px;
+}
+
+.floating-notice-action {
+  background: var(--panel-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  min-height: 30px;
+  padding: 6px 12px;
+}
+
+.floating-notice-action:hover {
+  background: var(--panel-blue);
 }
 
 .floating-notice-subtle {

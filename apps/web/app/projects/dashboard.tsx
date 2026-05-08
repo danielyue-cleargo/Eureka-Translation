@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Campaign, Locale, Product, Term } from "@eu-translation/shared";
 import { createId, folderForTermType, libraryFolders, locales, termTypes } from "@eu-translation/shared";
+import { AppVersionStatus } from "@/app/components/AppVersionStatus";
 import {
   cloudSyncBadgeLabel,
   cloudSyncBadgeTone,
@@ -11,6 +12,10 @@ import {
 } from "@/lib/cloud-sync-status";
 
 type NoticeTone = "info" | "success" | "error";
+type NoticeAction = {
+  label: string;
+  onClick: () => void | Promise<void>;
+};
 type ApiConnectionStatus = {
   checking: boolean;
   configured: boolean;
@@ -72,6 +77,7 @@ export function Dashboard() {
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
   const [status, setStatus] = useState("Home ready");
   const [noticeTone, setNoticeTone] = useState<NoticeTone>("info");
+  const [noticeAction, setNoticeAction] = useState<NoticeAction | null>(null);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [apiConnections, setApiConnections] = useState<{
     figma: ApiConnectionStatus;
@@ -125,14 +131,16 @@ export function Dashboard() {
     const timer = window.setTimeout(() => {
       setStatus("Home ready");
       setNoticeTone("info");
-    }, 4200);
+      setNoticeAction(null);
+    }, noticeAction ? 12000 : 4200);
 
     return () => window.clearTimeout(timer);
-  }, [busy, status]);
+  }, [busy, noticeAction, status]);
 
-  function showNotice(message: string, tone: NoticeTone = "info") {
+  function showNotice(message: string, tone: NoticeTone = "info", action: NoticeAction | null = null) {
     setStatus(message);
     setNoticeTone(tone);
+    setNoticeAction(action);
   }
 
   async function refreshApiConnections() {
@@ -652,7 +660,10 @@ export function Dashboard() {
         <div>
           <div className="brand">EU Figma Translation</div>
         </div>
-        <ApiConnectionSignals figma={apiConnections.figma} openai={apiConnections.openai} />
+        <div className="topbar-right">
+          <AppVersionStatus onNotice={showNotice} />
+          <ApiConnectionSignals figma={apiConnections.figma} openai={apiConnections.openai} />
+        </div>
       </header>
 
       <section className="app-layout">
@@ -725,6 +736,7 @@ export function Dashboard() {
       </section>
       <FloatingNotice
         busy={busy}
+        action={noticeAction}
         isGenerating={isGenerating}
         message={status}
         progress={generationProgress}
@@ -891,6 +903,7 @@ function HomePage({
                 <input
                   className="input"
                   placeholder="https://de.eureka.com/products/eureka-j15-max-ultra"
+                  suppressHydrationWarning
                   value={productUrlDraft ?? ""}
                   onChange={(event) => {
                     const next = inputString(event.target.value);
@@ -987,12 +1000,14 @@ function HomePage({
 }
 
 function FloatingNotice({
+  action,
   busy,
   isGenerating,
   message,
   progress,
   tone
 }: {
+  action: NoticeAction | null;
   busy: string | null;
   isGenerating: boolean;
   message: string;
@@ -1006,6 +1021,11 @@ function FloatingNotice({
       <div className="floating-notice-meta">
         <span>{message}</span>
         {isGenerating ? <span>{progress}%</span> : null}
+        {!isGenerating && action ? (
+          <button className="floating-notice-action" onClick={() => void action.onClick()} type="button">
+            {action.label}
+          </button>
+        ) : null}
       </div>
       {isGenerating ? (
         <div className="floating-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
