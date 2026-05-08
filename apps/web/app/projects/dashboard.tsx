@@ -2201,10 +2201,13 @@ function ProductsPanel({
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [campaignManagerOpen, setCampaignManagerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showCampaignPricesOnly, setShowCampaignPricesOnly] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId);
   const campaignMode = Boolean(selectedCampaignId);
-  const filteredProducts = products.filter((product) => matchesProductSearch(product, searchQuery));
+  const filteredProducts = products.filter(
+    (product) => matchesProductSearch(product, searchQuery) && (!showCampaignPricesOnly || (product.hasCampaignPrice && product.discountedPrice !== product.defaultDiscountedPrice))
+  );
   const pageCount = Math.max(1, Math.ceil(filteredProducts.length / LIBRARY_PAGE_SIZE));
   const clampedPage = Math.min(currentPage, pageCount);
   const pageStartIndex = (clampedPage - 1) * LIBRARY_PAGE_SIZE;
@@ -2217,9 +2220,22 @@ function ProductsPanel({
     setCurrentPage(pageCount);
   }, [currentPage, pageCount]);
 
+  useEffect(() => {
+    if (campaignMode) return;
+    setShowCampaignPricesOnly(false);
+  }, [campaignMode]);
+
   function startEdit(product: Product) {
     setEditingId(product.id);
     setDraft({ ...product });
+  }
+
+  function startCampaignPriceEdit(product: Product) {
+    setEditingId(product.id);
+    setDraft({
+      ...product,
+      discountedPrice: product.defaultDiscountedPrice ?? product.discountedPrice
+    });
   }
 
   function cancelEdit() {
@@ -2273,6 +2289,16 @@ function ProductsPanel({
             suppressHydrationWarning
             value={searchQuery}
           />
+          <label className="campaign-price-filter">
+            <input
+              checked={showCampaignPricesOnly}
+              disabled={!campaignMode}
+              onChange={(event) => setShowCampaignPricesOnly(event.target.checked)}
+              suppressHydrationWarning
+              type="checkbox"
+            />
+            <span>Show Campaign Prices Only</span>
+          </label>
         </div>
         {products.length === 0 ? (
           <p>No product pricing yet. Upload an .xls or .xlsx file to get started.</p>
@@ -2294,6 +2320,7 @@ function ProductsPanel({
                 <tbody>
                   {paginatedProducts.map((product) => {
                     const isEditing = editingId === product.id && draft;
+                    const isCampaignFallback = campaignMode && !product.hasCampaignPrice;
                     return (
                       <tr key={product.id}>
                         <td>
@@ -2305,7 +2332,10 @@ function ProductsPanel({
                               value={draft.productName}
                             />
                           ) : (
-                            product.productName
+                            <span className="product-name-cell">
+                              <span>{product.productName}</span>
+                              {isCampaignFallback ? <span className="default-price-badge">Default Price</span> : null}
+                            </span>
                           )}
                         </td>
                         <td>
@@ -2351,17 +2381,25 @@ function ProductsPanel({
                             </div>
                           ) : (
                             <div className="table-actions">
-                              <button className="small-button secondary table-action-button" onClick={() => startEdit(product)} type="button">
-                                Edit
-                              </button>
-                              <button
-                                className="small-button danger table-action-button"
-                                disabled={busy === `product-delete-${product.id}`}
-                                onClick={() => onDeleteProduct(product.id, selectedCampaignId)}
-                                type="button"
-                              >
-                                {campaignMode ? "Remove" : "Delete"}
-                              </button>
+                              {isCampaignFallback ? (
+                                <button className="small-button secondary table-action-button" onClick={() => startCampaignPriceEdit(product)} type="button">
+                                  Add Campaign Price
+                                </button>
+                              ) : (
+                                <>
+                                  <button className="small-button secondary table-action-button" onClick={() => startEdit(product)} type="button">
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="small-button danger table-action-button"
+                                    disabled={busy === `product-delete-${product.id}`}
+                                    onClick={() => onDeleteProduct(product.id, selectedCampaignId)}
+                                    type="button"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </td>
