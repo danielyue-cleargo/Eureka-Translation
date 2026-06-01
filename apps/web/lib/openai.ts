@@ -19,20 +19,26 @@ import {
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getOpenAiBaseUrl, getOpenAiModel, getRuntimeOpenAiApiKey } from "./settings";
+import { getActiveLlmApiKey, getLlmProvider, getOpenAiBaseUrl, getOpenAiModel, getRuntimeOpenAiApiKey } from "./settings";
+import { callGeminiStructured } from "./gemini";
+import { parseJsonText } from "./parse-json-text";
 
 const OPENAI_MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
 function getApiKey(): string | undefined {
-  return getRuntimeOpenAiApiKey() || process.env.OPENAI_API_KEY;
+  return getActiveLlmApiKey();
 }
 
 function getModel(): string {
   return getOpenAiModel();
 }
 
-export function hasOpenAiApiKey(): boolean {
+export function hasLlmApiKey(): boolean {
   return Boolean(getApiKey());
+}
+
+export function hasOpenAiApiKey(): boolean {
+  return hasLlmApiKey();
 }
 
 export async function extractTermsFromSource(input: {
@@ -45,7 +51,7 @@ export async function extractTermsFromSource(input: {
   vectorStoreId?: string;
 }): Promise<Term[]> {
   if (!getApiKey()) {
-    throw new Error("OpenAI API key is required. Add it in Setting.");
+    throw new Error("AI API key is required. Add it in Setting.");
   }
 
   const schema = {
@@ -260,6 +266,13 @@ async function callStructuredResponse(input: {
   input: string;
   vectorStoreId?: string;
 }): Promise<any> {
+  if (getLlmProvider() === "gemini") {
+    if (input.vectorStoreId) {
+      throw new Error("PDF/Word File Search requires OpenAI provider. Switch to OpenAI in Setting.");
+    }
+    return callGeminiStructured(input);
+  }
+
   const responsesResult = await callResponsesStructured(input);
   if (responsesResult.ok) return responsesResult.data;
 
@@ -279,6 +292,8 @@ async function callStructuredResponse(input: {
     ].join(" ")
   );
 }
+
+export { parseJsonText } from "./parse-json-text";
 
 async function callResponsesStructured(input: {
   schemaName: string;
@@ -407,22 +422,6 @@ async function postChatCompletions(body: object): Promise<{ ok: true; data: any 
   return { ok: true, data: parseJsonText(text) };
 }
 
-export function parseJsonText(text: string): any {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const jsonText = fenced ? fenced[1].trim() : trimmed;
-  try {
-    return JSON.parse(jsonText);
-  } catch {
-    const start = jsonText.indexOf("{");
-    const end = jsonText.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      return JSON.parse(jsonText.slice(start, end + 1));
-    }
-    throw new Error("OpenAI response was not valid JSON");
-  }
-}
-
 export function shouldFallbackToChat(status: number | undefined, body: string): boolean {
   if (!status) return true;
   if ([400, 404, 405, 422, 500, 501, 502].includes(status)) return true;
@@ -456,7 +455,7 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function uploadFileToVectorStore(file: File): Promise<{ fileId: string; vectorStoreId: string }> {
-  const apiKey = getApiKey();
+  const apiKey = getRuntimeOpenAiApiKey() || process.env.OPENAI_API_KEY;
   const configuredVectorStoreId = process.env.OPENAI_VECTOR_STORE_ID;
   if (!apiKey || !configuredVectorStoreId) {
     throw new Error("OPENAI_API_KEY and OPENAI_VECTOR_STORE_ID are required for document File Search ingestion");

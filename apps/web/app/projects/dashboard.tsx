@@ -21,6 +21,7 @@ type ApiConnectionStatus = {
   configured: boolean;
   connected: boolean;
   error?: string;
+  provider?: "openai" | "gemini";
   source: "runtime" | "env" | "none";
 };
 type SyncConflict = {
@@ -148,7 +149,7 @@ export function Dashboard() {
       figma: { ...current.figma, checking: true },
       openai: { ...current.openai, checking: true }
     }));
-    const [openai, figma] = await Promise.all([loadApiConnection("/api/settings/openai?verify=1"), loadApiConnection("/api/settings/figma?verify=1")]);
+    const [openai, figma] = await Promise.all([loadApiConnection("/api/settings/llm?verify=1"), loadApiConnection("/api/settings/figma?verify=1")]);
     setApiConnections({ figma, openai });
   }
 
@@ -785,6 +786,7 @@ async function loadApiConnection(url: string): Promise<ApiConnectionStatus> {
       configured: Boolean(data.configured),
       connected: Boolean(data.connected),
       error: data.error ? String(data.error) : undefined,
+      provider: data.provider === "gemini" || data.provider === "openai" ? data.provider : undefined,
       source: data.source === "runtime" || data.source === "env" ? data.source : "none"
     };
   } catch (error) {
@@ -799,9 +801,10 @@ async function loadApiConnection(url: string): Promise<ApiConnectionStatus> {
 }
 
 function ApiConnectionSignals({ figma, openai }: { figma: ApiConnectionStatus; openai: ApiConnectionStatus }) {
+  const llmLabel = openai.provider === "gemini" ? "Gemini" : "OpenAI";
   return (
     <div className="api-signals" aria-label="API connection status">
-      <ApiConnectionSignal label="OpenAI" status={openai} />
+      <ApiConnectionSignal label={llmLabel} status={openai} />
       <ApiConnectionSignal label="Figma" status={figma} />
     </div>
   );
@@ -1199,22 +1202,45 @@ function SettingPanel({
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.openai.com/v1");
   const [figmaToken, setFigmaToken] = useState("");
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [geminiBaseUrl, setGeminiBaseUrl] = useState("https://generativelanguage.googleapis.com/v1beta");
+  const [geminiModel, setGeminiModel] = useState("gemini-2.5-flash");
   const [model, setModel] = useState("gpt-5.5");
+  const [provider, setProvider] = useState<"openai" | "gemini">("openai");
   const [supabaseServiceRoleKey, setSupabaseServiceRoleKey] = useState("");
   const [supabaseUrl, setSupabaseUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [showFigmaToken, setShowFigmaToken] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showGeminiApiKey, setShowGeminiApiKey] = useState(false);
   const [showSupabaseKey, setShowSupabaseKey] = useState(false);
   const [status, setStatus] = useState<{
     baseUrl?: string;
     configured: boolean;
+    gemini?: {
+      baseUrl?: string;
+      configured: boolean;
+      maskedKey?: string;
+      model?: string;
+      source: "runtime" | "env" | "none";
+    };
+    maskedGeminiKey?: string;
     maskedKey?: string;
+    maskedOpenAiKey?: string;
     model?: string;
+    openai?: {
+      baseUrl?: string;
+      configured: boolean;
+      maskedKey?: string;
+      model?: string;
+      source: "runtime" | "env" | "none";
+    };
+    provider?: "openai" | "gemini";
     source: "runtime" | "env" | "none";
   }>({
     configured: false,
     model: "gpt-5.5",
+    provider: "openai",
     source: "none"
   });
   const [figmaStatus, setFigmaStatus] = useState<{
@@ -1248,13 +1274,17 @@ function SettingPanel({
 
   async function loadStatus() {
     try {
-      const response = await fetch("/api/settings/openai");
+      const response = await fetch("/api/settings/llm");
       const data = await readSettingsResponse(response);
       if (!response.ok) throw new Error(data.error || "Load failed");
       setStatus(data);
-      setApiKey(data.maskedKey || "");
-      setBaseUrl(data.baseUrl || "https://api.openai.com/v1");
-      setModel(data.model || "gpt-5.5");
+      setProvider(data.provider === "gemini" ? "gemini" : "openai");
+      setApiKey(data.maskedOpenAiKey || data.openai?.maskedKey || "");
+      setBaseUrl(data.openai?.baseUrl || data.baseUrl || "https://api.openai.com/v1");
+      setModel(data.openai?.model || "gpt-5.5");
+      setGeminiApiKey(data.maskedGeminiKey || data.gemini?.maskedKey || "");
+      setGeminiBaseUrl(data.gemini?.baseUrl || data.baseUrl || "https://generativelanguage.googleapis.com/v1beta");
+      setGeminiModel(data.gemini?.model || "gemini-2.5-flash");
       setMessage(settingMessage(data));
     } catch {
       const message = "Cannot reach the local settings API. Check that the dev server is running.";
@@ -1297,18 +1327,21 @@ function SettingPanel({
   async function saveKey() {
     setBusy("save");
     try {
-      const response = await fetch("/api/settings/openai", {
+      const response = await fetch("/api/settings/llm", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ apiKey, baseUrl, model })
+        body: JSON.stringify({ apiKey, baseUrl, geminiApiKey, geminiBaseUrl, geminiModel, model, provider })
       });
       const data = await readSettingsResponse(response);
       if (!response.ok) throw new Error(data.error || "Save failed");
-      setApiKey(data.maskedKey || "");
+      setApiKey(data.maskedOpenAiKey || data.openai?.maskedKey || "");
+      setGeminiApiKey(data.maskedGeminiKey || data.gemini?.maskedKey || "");
       setShowApiKey(false);
+      setShowGeminiApiKey(false);
       setStatus(data);
+      setProvider(data.provider === "gemini" ? "gemini" : "openai");
       setMessage(settingMessage(data));
-      onNotice("OpenAI settings saved", "success");
+      onNotice(`${data.provider === "gemini" ? "Gemini" : "OpenAI"} settings saved`, "success");
       onConnectionsChanged();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Save failed. Check that the dev server is running.";
@@ -1321,14 +1354,19 @@ function SettingPanel({
   async function clearKey() {
     setBusy("clear");
     try {
-      const response = await fetch("/api/settings/openai", { method: "DELETE" });
+      const response = await fetch("/api/settings/llm", { method: "DELETE" });
       const data = await readSettingsResponse(response);
       if (!response.ok) throw new Error(data.error || "Clear failed");
       setStatus(data);
-      setApiKey(data.maskedKey || "");
-      setModel(data.model || "gpt-5.5");
+      if (provider === "gemini") {
+        setGeminiApiKey(data.maskedGeminiKey || "");
+        setGeminiModel(data.gemini?.model || "gemini-2.5-flash");
+      } else {
+        setApiKey(data.maskedOpenAiKey || data.openai?.maskedKey || "");
+        setModel(data.openai?.model || "gpt-5.5");
+      }
       setMessage(settingMessage(data));
-      onNotice("OpenAI runtime key cleared", "success");
+      onNotice(`${provider === "gemini" ? "Gemini" : "OpenAI"} runtime key cleared`, "success");
       onConnectionsChanged();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Cannot reach the local settings API. Check that the dev server is running.";
@@ -1426,48 +1464,105 @@ function SettingPanel({
     setBusy(null);
   }
 
+  const activeKey = provider === "gemini" ? geminiApiKey : apiKey;
+  const activeSource = provider === "gemini" ? status.gemini?.source : status.openai?.source;
+
   return (
     <section className="settings-layout">
       <div className="panel stack">
         <h2>Setting</h2>
+        <h3>AI Provider</h3>
         <label className="field">
-          <span>OpenAI API Key</span>
-          <div className="secret-field">
-            <input
-              className="input"
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder="Enter API key"
-              suppressHydrationWarning
-              type={showApiKey ? "text" : "password"}
-              value={apiKey}
-              onFocus={() => {
-                if (!showApiKey && status.maskedKey && apiKey === status.maskedKey) setApiKey("");
-              }}
-            />
-            <button className="icon-button" onClick={() => setShowApiKey(!showApiKey)} type="button">
-              {showApiKey ? "Hide" : "Show"}
-            </button>
-          </div>
+          <span>Provider</span>
+          <select className="input" onChange={(event) => setProvider(event.target.value === "gemini" ? "gemini" : "openai")} value={provider}>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+          </select>
         </label>
-        <label className="field">
-          <span>OpenAI API URL</span>
-          <input
-            className="input"
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="https://api.openai.com/v1"
-            suppressHydrationWarning
-            value={baseUrl}
-          />
-        </label>
-        <label className="field">
-          <span>OpenAI Model</span>
-          <input className="input" onChange={(event) => setModel(event.target.value)} placeholder="gpt-5.5" suppressHydrationWarning value={model} />
-        </label>
+        {provider === "openai" ? (
+          <>
+            <label className="field">
+              <span>OpenAI API Key</span>
+              <div className="secret-field">
+                <input
+                  className="input"
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="Enter API key"
+                  suppressHydrationWarning
+                  type={showApiKey ? "text" : "password"}
+                  value={apiKey}
+                  onFocus={() => {
+                    if (!showApiKey && status.openai?.maskedKey && apiKey === status.openai.maskedKey) setApiKey("");
+                  }}
+                />
+                <button className="icon-button" onClick={() => setShowApiKey(!showApiKey)} type="button">
+                  {showApiKey ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
+            <label className="field">
+              <span>OpenAI API URL</span>
+              <input
+                className="input"
+                onChange={(event) => setBaseUrl(event.target.value)}
+                placeholder="https://api.openai.com/v1"
+                suppressHydrationWarning
+                value={baseUrl}
+              />
+            </label>
+            <label className="field">
+              <span>OpenAI Model</span>
+              <input className="input" onChange={(event) => setModel(event.target.value)} placeholder="gpt-5.5" suppressHydrationWarning value={model} />
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="field">
+              <span>Gemini API Key</span>
+              <div className="secret-field">
+                <input
+                  className="input"
+                  onChange={(event) => setGeminiApiKey(event.target.value)}
+                  placeholder="Enter Gemini API key"
+                  suppressHydrationWarning
+                  type={showGeminiApiKey ? "text" : "password"}
+                  value={geminiApiKey}
+                  onFocus={() => {
+                    if (!showGeminiApiKey && status.gemini?.maskedKey && geminiApiKey === status.gemini.maskedKey) setGeminiApiKey("");
+                  }}
+                />
+                <button className="icon-button" onClick={() => setShowGeminiApiKey(!showGeminiApiKey)} type="button">
+                  {showGeminiApiKey ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
+            <label className="field">
+              <span>Gemini API URL</span>
+              <input
+                className="input"
+                onChange={(event) => setGeminiBaseUrl(event.target.value)}
+                placeholder="https://generativelanguage.googleapis.com/v1beta"
+                suppressHydrationWarning
+                value={geminiBaseUrl}
+              />
+            </label>
+            <label className="field">
+              <span>Gemini Model</span>
+              <input
+                className="input"
+                onChange={(event) => setGeminiModel(event.target.value)}
+                placeholder="gemini-2.5-flash"
+                suppressHydrationWarning
+                value={geminiModel}
+              />
+            </label>
+          </>
+        )}
         <div className="button-row">
-          <button className="button" disabled={busy === "save" || !apiKey.trim()} onClick={saveKey} type="button">
+          <button className="button" disabled={busy === "save" || !activeKey.trim()} onClick={saveKey} type="button">
             {busy === "save" ? "Saving..." : "Save"}
           </button>
-          <button className="button secondary" disabled={busy === "clear" || status.source !== "runtime"} onClick={clearKey} type="button">
+          <button className="button secondary" disabled={busy === "clear" || activeSource !== "runtime"} onClick={clearKey} type="button">
             {busy === "clear" ? "Clearing..." : "Clear"}
           </button>
         </div>
@@ -1563,13 +1658,35 @@ async function readJsonResponse(response: Response, label: string) {
 function settingMessage(status: {
   baseUrl?: string;
   configured: boolean;
+  gemini?: {
+    baseUrl?: string;
+    configured: boolean;
+    maskedKey?: string;
+    model?: string;
+    source: "runtime" | "env" | "none";
+  };
   maskedKey?: string;
   model?: string;
+  openai?: {
+    baseUrl?: string;
+    configured: boolean;
+    maskedKey?: string;
+    model?: string;
+    source: "runtime" | "env" | "none";
+  };
+  provider?: "openai" | "gemini";
   source: "runtime" | "env" | "none";
 }): string {
-  if (!status.configured) return "No OpenAI API key configured.";
+  const providerLabel = status.provider === "gemini" ? "Gemini" : "OpenAI";
+  if (!status.configured) return `No ${providerLabel} API key configured.`;
   if (status.source === "runtime") {
+    if (status.provider === "gemini") {
+      return `Runtime key verified and configured: ${status.maskedKey}. API URL: ${status.baseUrl}. Model: ${status.model}`;
+    }
     return `Runtime key verified and configured: ${status.maskedKey}. API URL: ${status.baseUrl}. Model: ${status.model}`;
+  }
+  if (status.provider === "gemini") {
+    return `Environment key configured: ${status.maskedKey}. API URL: ${status.baseUrl}. Model: ${status.model}`;
   }
   return `Environment key configured: ${status.maskedKey}. API URL: ${status.baseUrl}. Model: ${status.model}`;
 }

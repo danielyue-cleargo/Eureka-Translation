@@ -4,22 +4,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { beforeEach } from "node:test";
 import {
+  clearActiveLlmApiKey,
+  clearRuntimeGeminiApiKey,
   clearRuntimeOpenAiApiKey,
   clearRuntimeFigmaAccessToken,
   clearRuntimeSupabaseSettings,
+  getActiveLlmApiKey,
   getFigmaTokenStatus,
+  getGeminiKeyStatus,
+  getGeminiModel,
+  getLlmProvider,
+  getLlmSettingsStatus,
   getOpenAiBaseUrl,
   getOpenAiKeyStatus,
   getOpenAiModel,
   getRuntimeSettingsPathForTest,
+  hasLlmApiKey,
   getSupabaseSettings,
   getSupabaseSettingsStatus,
   maskOpenAiApiKey,
+  normalizeGeminiBaseUrl,
+  normalizeGeminiModel,
   normalizeOpenAiBaseUrl,
   normalizeOpenAiModel,
   normalizeSupabaseUrl,
   resetRuntimeSettingsForTest,
   setRuntimeFigmaAccessToken,
+  setRuntimeGeminiApiKey,
+  setRuntimeGeminiBaseUrl,
+  setRuntimeGeminiModel,
+  setRuntimeLlmProvider,
   setRuntimeOpenAiBaseUrl,
   setRuntimeOpenAiApiKey,
   setRuntimeOpenAiModel,
@@ -181,4 +195,81 @@ test("runtime Supabase settings are preferred over env and masked in status", ()
 test("normalizes Supabase URL", () => {
   assert.equal(normalizeSupabaseUrl("https://example.supabase.co/"), "https://example.supabase.co");
   assert.throws(() => normalizeSupabaseUrl("not a url"), /valid URL/);
+});
+
+test("persists llm provider and gemini settings", () => {
+  setRuntimeOpenAiApiKey("custom-provider-key_1234567890abcdef");
+  setRuntimeGeminiApiKey("gemini-key_1234567890abcdef");
+  setRuntimeGeminiModel("gemini-2.5-flash");
+  setRuntimeLlmProvider("gemini");
+
+  const saved = JSON.parse(readFileSync(getRuntimeSettingsPathForTest(), "utf8"));
+  assert.equal(saved.llmProvider, "gemini");
+  assert.equal(saved.geminiApiKey, "gemini-key_1234567890abcdef");
+  assert.equal(saved.geminiModel, "gemini-2.5-flash");
+  assert.equal(saved.apiKey, "custom-provider-key_1234567890abcdef");
+
+  resetRuntimeSettingsForTest(getRuntimeSettingsPathForTest());
+  assert.equal(getLlmProvider(), "gemini");
+  assert.equal(getGeminiModel(), "gemini-2.5-flash");
+  assert.equal(getActiveLlmApiKey(), "gemini-key_1234567890abcdef");
+  assert.equal(hasLlmApiKey(), true);
+});
+
+test("llm settings status reflects active provider", () => {
+  setRuntimeOpenAiApiKey("custom-provider-key_1234567890abcdef");
+  setRuntimeGeminiApiKey("gemini-key_1234567890abcdef");
+  setRuntimeLlmProvider("gemini");
+
+  const status = getLlmSettingsStatus();
+  assert.equal(status.provider, "gemini");
+  assert.equal(status.configured, true);
+  assert.equal(status.source, "runtime");
+  assert.equal(status.openai.configured, true);
+  assert.equal(status.gemini.configured, true);
+
+  setRuntimeLlmProvider("openai");
+  const openAiStatus = getLlmSettingsStatus();
+  assert.equal(openAiStatus.provider, "openai");
+  assert.equal(openAiStatus.configured, true);
+});
+
+test("clearing active llm key preserves the other provider key", () => {
+  setRuntimeOpenAiApiKey("custom-provider-key_1234567890abcdef");
+  setRuntimeGeminiApiKey("gemini-key_1234567890abcdef");
+  setRuntimeLlmProvider("gemini");
+
+  clearActiveLlmApiKey();
+  assert.equal(getGeminiKeyStatus().configured, false);
+  assert.equal(getOpenAiKeyStatus().configured, true);
+});
+
+test("env gemini key is used when runtime key is absent and provider is gemini", () => {
+  clearRuntimeGeminiApiKey();
+  setRuntimeLlmProvider("gemini");
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "gemini-env-key_1234567890abcdef";
+  try {
+    const status = getLlmSettingsStatus(undefined, process.env.GEMINI_API_KEY);
+    assert.equal(status.provider, "gemini");
+    assert.equal(status.configured, true);
+    assert.equal(status.source, "env");
+  } finally {
+    if (previous === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previous;
+  }
+});
+
+test("normalizes gemini model", () => {
+  setRuntimeGeminiModel("gemini-2.5-flash");
+  assert.equal(getGeminiModel(), "gemini-2.5-flash");
+  assert.equal(normalizeGeminiModel(" gemini-2.5-flash "), "gemini-2.5-flash");
+  assert.throws(() => normalizeGeminiModel("gemini 2.5"), /must not contain spaces/);
+});
+
+test("normalizes and stores runtime gemini base url", () => {
+  setRuntimeGeminiBaseUrl("https://generativelanguage.googleapis.com/v1beta/");
+  assert.equal(normalizeGeminiBaseUrl("https://proxy.example.com/v1beta/"), "https://proxy.example.com/v1beta");
+  const saved = JSON.parse(readFileSync(getRuntimeSettingsPathForTest(), "utf8"));
+  assert.equal(saved.geminiBaseUrl, "https://generativelanguage.googleapis.com/v1beta");
 });

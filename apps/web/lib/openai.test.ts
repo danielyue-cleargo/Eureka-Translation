@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { Term } from "@eu-translation/shared";
 import { buildTerminologyExtractionInput, figmaTranslationInstructions, parseJsonText, shouldFallbackToChat, translateFrame, translationGenerationRules } from "./openai";
-import { clearRuntimeOpenAiApiKey, resetRuntimeSettingsForTest, setRuntimeOpenAiApiKey } from "./settings";
+import { clearRuntimeGeminiApiKey, clearRuntimeOpenAiApiKey, resetRuntimeSettingsForTest, setRuntimeGeminiApiKey, setRuntimeGeminiModel, setRuntimeLlmProvider, setRuntimeOpenAiApiKey } from "./settings";
 
 resetRuntimeSettingsForTest(join(mkdtempSync(join(tmpdir(), "eu-web-openai-test-settings-")), "settings.json"));
 
@@ -411,3 +411,60 @@ function makeTerm(id: string, canonical: string, type: Term["type"], translation
     updatedAt: new Date().toISOString()
   };
 }
+
+test("figma translation routes to Gemini when gemini provider is active", async () => {
+  const previousFetch = globalThis.fetch;
+  let requestUrl = "";
+  setRuntimeLlmProvider("gemini");
+  setRuntimeGeminiApiKey("gemini-key_1234567890abcdef");
+  setRuntimeGeminiModel("gemini-2.5-flash");
+  globalThis.fetch = (async (url) => {
+    requestUrl = String(url);
+    return new Response(
+      JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    nodes: [{ nodeId: "node_1", translations: { DE: "Beispiel" }, confidence: 0.9 }]
+                  })
+                }
+              ]
+            }
+          }
+        ]
+      }),
+      { headers: { "content-type": "application/json" }, status: 200 }
+    );
+  }) as typeof fetch;
+
+  try {
+    await translateFrame({
+      projectId: "project_1",
+      targetLocales: ["DE"],
+      frame: {
+        nodeId: "frame_1",
+        frameName: "Frame",
+        capturedAt: new Date().toISOString(),
+        textNodes: [
+          {
+            id: "node_1",
+            name: "Headline",
+            characters: "Example",
+            visible: true,
+            locked: false,
+            parentPath: []
+          }
+        ]
+      },
+      terms: []
+    });
+    assert.match(requestUrl, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.5-flash:generateContent$/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    clearRuntimeGeminiApiKey();
+    setRuntimeLlmProvider("openai");
+  }
+});

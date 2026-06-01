@@ -1,4 +1,6 @@
 export type OpenAiKeySource = "runtime" | "env" | "none";
+export type LlmKeySource = "runtime" | "env" | "none";
+export type LlmProvider = "openai" | "gemini";
 export type FigmaTokenSource = "runtime" | "env" | "none";
 export type SupabaseSettingsSource = "runtime" | "env" | "none";
 
@@ -8,12 +10,19 @@ import { getWebRuntimePath } from "./runtime-path";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_LLM_PROVIDER: LlmProvider = "openai";
 let runtimeSettingsPathOverride = process.env.APP_SETTINGS_PATH;
 
 type RuntimeSettings = {
   apiKey?: string;
   baseUrl?: string;
   figmaAccessToken?: string;
+  geminiApiKey?: string;
+  geminiBaseUrl?: string;
+  geminiModel?: string;
+  llmProvider?: LlmProvider;
   model?: string;
   supabaseServiceRoleKey?: string;
   supabaseSyncEnabled?: boolean;
@@ -64,6 +73,10 @@ function applyRuntimeSettings(parsed: RuntimeSettings): void {
   runtimeSettings.apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey : undefined;
   runtimeSettings.baseUrl = typeof parsed.baseUrl === "string" ? normalizeOpenAiBaseUrl(parsed.baseUrl) : undefined;
   runtimeSettings.figmaAccessToken = typeof parsed.figmaAccessToken === "string" ? parsed.figmaAccessToken : undefined;
+  runtimeSettings.geminiApiKey = typeof parsed.geminiApiKey === "string" ? parsed.geminiApiKey : undefined;
+  runtimeSettings.geminiBaseUrl = typeof parsed.geminiBaseUrl === "string" ? normalizeGeminiBaseUrl(parsed.geminiBaseUrl) : undefined;
+  runtimeSettings.geminiModel = typeof parsed.geminiModel === "string" ? normalizeGeminiModel(parsed.geminiModel) : undefined;
+  runtimeSettings.llmProvider = normalizeLlmProvider(parsed.llmProvider);
   runtimeSettings.model = typeof parsed.model === "string" ? normalizeOpenAiModel(parsed.model) : undefined;
   runtimeSettings.supabaseServiceRoleKey = typeof parsed.supabaseServiceRoleKey === "string" ? parsed.supabaseServiceRoleKey : undefined;
   runtimeSettings.supabaseSyncEnabled = typeof parsed.supabaseSyncEnabled === "boolean" ? parsed.supabaseSyncEnabled : undefined;
@@ -86,6 +99,18 @@ function getLegacyRuntimeSettingsPath(): string {
 
 export function getRuntimeOpenAiApiKey(): string | undefined {
   return loadRuntimeSettings().apiKey;
+}
+
+export function getRuntimeGeminiApiKey(): string | undefined {
+  return loadRuntimeSettings().geminiApiKey;
+}
+
+export function getRuntimeGeminiBaseUrl(): string | undefined {
+  return loadRuntimeSettings().geminiBaseUrl;
+}
+
+export function getRuntimeLlmProvider(): LlmProvider | undefined {
+  return loadRuntimeSettings().llmProvider;
 }
 
 export function getRuntimeOpenAiBaseUrl(): string | undefined {
@@ -116,6 +141,37 @@ export function getOpenAiModel(): string {
   return normalizeOpenAiModel(loadRuntimeSettings().model || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL);
 }
 
+export function getGeminiModel(): string {
+  return normalizeGeminiModel(loadRuntimeSettings().geminiModel || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL);
+}
+
+export function getGeminiBaseUrl(): string {
+  return normalizeGeminiBaseUrl(getRuntimeGeminiBaseUrl() || process.env.GEMINI_BASE_URL || DEFAULT_GEMINI_BASE_URL);
+}
+
+export function getLlmProvider(): LlmProvider {
+  const runtimeProvider = getRuntimeLlmProvider();
+  if (runtimeProvider) return runtimeProvider;
+  const envProvider = process.env.LLM_PROVIDER;
+  if (envProvider === "gemini" || envProvider === "openai") return envProvider;
+  return DEFAULT_LLM_PROVIDER;
+}
+
+export function getActiveLlmApiKey(): string | undefined {
+  if (getLlmProvider() === "gemini") {
+    return getRuntimeGeminiApiKey() || process.env.GEMINI_API_KEY;
+  }
+  return getRuntimeOpenAiApiKey() || process.env.OPENAI_API_KEY;
+}
+
+export function getActiveLlmModel(): string {
+  return getLlmProvider() === "gemini" ? getGeminiModel() : getOpenAiModel();
+}
+
+export function hasLlmApiKey(): boolean {
+  return Boolean(getActiveLlmApiKey());
+}
+
 export function setRuntimeOpenAiApiKey(apiKey: string): void {
   loadRuntimeSettings();
   const normalized = apiKey.trim();
@@ -135,6 +191,34 @@ export function setRuntimeOpenAiBaseUrl(baseUrl: string): void {
 export function setRuntimeOpenAiModel(model: string): void {
   loadRuntimeSettings();
   runtimeSettings.model = normalizeOpenAiModel(model || DEFAULT_OPENAI_MODEL);
+  saveRuntimeSettings();
+}
+
+export function setRuntimeGeminiApiKey(apiKey: string): void {
+  loadRuntimeSettings();
+  const normalized = apiKey.trim();
+  if (!isValidApiKey(normalized)) {
+    throw new Error("API key is required");
+  }
+  runtimeSettings.geminiApiKey = normalized;
+  saveRuntimeSettings();
+}
+
+export function setRuntimeGeminiBaseUrl(baseUrl: string): void {
+  loadRuntimeSettings();
+  runtimeSettings.geminiBaseUrl = normalizeGeminiBaseUrl(baseUrl || DEFAULT_GEMINI_BASE_URL);
+  saveRuntimeSettings();
+}
+
+export function setRuntimeGeminiModel(model: string): void {
+  loadRuntimeSettings();
+  runtimeSettings.geminiModel = normalizeGeminiModel(model || DEFAULT_GEMINI_MODEL);
+  saveRuntimeSettings();
+}
+
+export function setRuntimeLlmProvider(provider: LlmProvider): void {
+  loadRuntimeSettings();
+  runtimeSettings.llmProvider = normalizeLlmProvider(provider) ?? DEFAULT_LLM_PROVIDER;
   saveRuntimeSettings();
 }
 
@@ -165,6 +249,20 @@ export function clearRuntimeOpenAiApiKey(): void {
   loadRuntimeSettings();
   runtimeSettings.apiKey = undefined;
   saveRuntimeSettings();
+}
+
+export function clearRuntimeGeminiApiKey(): void {
+  loadRuntimeSettings();
+  runtimeSettings.geminiApiKey = undefined;
+  saveRuntimeSettings();
+}
+
+export function clearActiveLlmApiKey(): void {
+  if (getLlmProvider() === "gemini") {
+    clearRuntimeGeminiApiKey();
+    return;
+  }
+  clearRuntimeOpenAiApiKey();
 }
 
 export function clearRuntimeFigmaAccessToken(): void {
@@ -280,7 +378,64 @@ export function getOpenAiKeyStatus(envKey = process.env.OPENAI_API_KEY): {
   };
 }
 
+export function getGeminiKeyStatus(envKey = process.env.GEMINI_API_KEY): {
+  baseUrl: string;
+  configured: boolean;
+  maskedKey?: string;
+  model: string;
+  source: LlmKeySource;
+} {
+  const runtimeKey = getRuntimeGeminiApiKey();
+  const key = runtimeKey || envKey;
+  if (!key) return { baseUrl: getGeminiBaseUrl(), configured: false, model: getGeminiModel(), source: "none" };
+  return {
+    baseUrl: getGeminiBaseUrl(),
+    configured: true,
+    maskedKey: maskSecret(key),
+    model: getGeminiModel(),
+    source: runtimeKey ? "runtime" : "env"
+  };
+}
+
+export function getLlmSettingsStatus(
+  envOpenAiKey = process.env.OPENAI_API_KEY,
+  envGeminiKey = process.env.GEMINI_API_KEY
+): {
+  baseUrl?: string;
+  configured: boolean;
+  gemini: ReturnType<typeof getGeminiKeyStatus>;
+  maskedGeminiKey?: string;
+  maskedOpenAiKey?: string;
+  maskedKey?: string;
+  model: string;
+  openai: ReturnType<typeof getOpenAiKeyStatus>;
+  provider: LlmProvider;
+  source: LlmKeySource;
+} {
+  const provider = getLlmProvider();
+  const openai = getOpenAiKeyStatus(envOpenAiKey);
+  const gemini = getGeminiKeyStatus(envGeminiKey);
+  const active = provider === "gemini" ? gemini : openai;
+
+  return {
+    baseUrl: provider === "openai" ? openai.baseUrl : gemini.baseUrl,
+    configured: active.configured,
+    gemini,
+    maskedGeminiKey: gemini.maskedKey,
+    maskedKey: active.maskedKey,
+    maskedOpenAiKey: openai.maskedKey,
+    model: active.model,
+    openai,
+    provider,
+    source: active.source
+  };
+}
+
 export function isValidOpenAiApiKey(apiKey: string): boolean {
+  return isValidApiKey(apiKey);
+}
+
+export function isValidApiKey(apiKey: string): boolean {
   return apiKey.trim().length > 0;
 }
 
@@ -314,6 +469,33 @@ export function normalizeOpenAiModel(model: string): string {
     throw new Error("OpenAI model must not contain spaces. Use a model id like gpt-5.5.");
   }
   return normalized;
+}
+
+export function normalizeGeminiModel(model: string): string {
+  const normalized = model.trim() || DEFAULT_GEMINI_MODEL;
+  if (/\s/.test(normalized)) {
+    throw new Error("Gemini model must not contain spaces. Use a model id like gemini-2.5-flash.");
+  }
+  return normalized;
+}
+
+export function normalizeGeminiBaseUrl(baseUrl: string): string {
+  const normalized = baseUrl.trim() || DEFAULT_GEMINI_BASE_URL;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error("Gemini API URL must be a valid URL");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Gemini API URL must use http or https");
+  }
+  return parsed.toString().replace(/\/$/, "");
+}
+
+export function normalizeLlmProvider(provider: unknown): LlmProvider | undefined {
+  if (provider === "openai" || provider === "gemini") return provider;
+  return undefined;
 }
 
 export function normalizeSupabaseUrl(url: string): string {

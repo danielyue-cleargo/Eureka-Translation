@@ -3,7 +3,7 @@ import { createId, locales, type Locale } from "@eu-translation/shared";
 import { extractTermsFromSource, uploadFileToVectorStore } from "@/lib/openai";
 import { sourceTextFromUrl } from "@/lib/source";
 import { DEFAULT_PROJECT_ID, store } from "@/lib/store";
-import { getOpenAiKeyStatus } from "@/lib/settings";
+import { getLlmProvider, getLlmSettingsStatus, getOpenAiKeyStatus } from "@/lib/settings";
 
 export async function POST(request: Request) {
   try {
@@ -23,8 +23,11 @@ export async function POST(request: Request) {
       const file = formData.get("file");
       if (!(file instanceof File)) throw new Error("Missing PDF or Word file");
       fileName = file.name;
+      if (getLlmProvider() === "gemini") {
+        throw new Error("PDF/Word extraction requires OpenAI provider and OPENAI_VECTOR_STORE_ID.");
+      }
       if (!getOpenAiKeyStatus().configured) {
-        throw new Error("OpenAI API key is required. Add it in Setting.");
+        throw new Error("OpenAI API key is required for PDF/Word extraction. Add it in Setting.");
       }
       if (process.env.OPENAI_VECTOR_STORE_ID) {
         const uploaded = await uploadFileToVectorStore(file);
@@ -55,6 +58,9 @@ export async function POST(request: Request) {
     }
 
     if (!sourceText.trim()) throw new Error("Source text is empty");
+    if (!getLlmSettingsStatus().configured) {
+      throw new Error("AI API key is required. Add it in Setting.");
+    }
 
     const source = store.addSource({
       id: sourceId,
